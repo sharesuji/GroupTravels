@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Trip Tracker</title>
+</head>
+<body>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+  #tm-root {
+    --bg: #faf9f7;
+    --surface: #ffffff;
+    --ink: #15161a;
+    --ink-soft: #6c6e78;
+    --ink-faint: #9b9da5;
+    --line: #e8e7e3;
+    --accent: #4b46e5;
+    --accent-soft: #eeedfd;
+    --positive: #12805c;
+    --negative: #d1483f;
+    font-family: 'Inter', sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    min-height: 100%;
+    padding: 40px 20px 70px;
+    box-sizing: border-box;
+    -webkit-font-smoothing: antialiased;
+  }
+  #tm-root * { box-sizing: border-box; }
+  #tm-root .mono { font-family: 'JetBrains Mono', monospace; }
+  #tm-root .disp { font-family: 'Space Grotesk', sans-serif; }
+
+  .tm-wrap { max-width: 760px; margin: 0 auto; }
+
+  /* ---- Header ---- */
+  .tm-eyebrow {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 10px; font-weight: 600;
+  }
+  .tm-tripname {
+    font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 40px;
+    letter-spacing: -0.01em; border: none; background: transparent; color: var(--ink);
+    outline: none; width: 100%; padding: 0; line-height: 1.1;
+  }
+  .tm-tripname::placeholder { color: var(--ink-faint); }
+  .tm-dest {
+    font-family: 'Inter', sans-serif; border: none; background: transparent; outline: none;
+    color: var(--ink-soft); font-size: 15px; margin-top: 6px; width: 100%; font-weight: 500;
+  }
+  .tm-dest::placeholder { color: var(--ink-faint); }
+
+  .tm-dates-inline { display: flex; align-items: center; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+  .tm-dates-inline input {
+    font-family: 'JetBrains Mono', monospace; font-size: 13px; border: 1px solid var(--line);
+    border-radius: 8px; padding: 7px 10px; background: var(--surface); outline: none; color: var(--ink);
+  }
+  .tm-dates-inline input:focus { border-color: var(--accent); }
+  .tm-arrow { color: var(--ink-faint); font-size: 13px; }
+
+  .tm-route-inline { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+  .tm-route-input {
+    font-family: 'Inter', sans-serif; font-size: 13.5px; font-weight: 500; border: 1px solid var(--line);
+    border-radius: 8px; padding: 7px 11px; background: var(--surface); outline: none; color: var(--ink);
+    min-width: 180px; flex: 1;
+  }
+  .tm-route-input:focus { border-color: var(--accent); }
+  .tm-route-input::placeholder { color: var(--ink-faint); }
+
+  /* signature: timeline meter */
+  .tm-meter { margin-top: 26px; }
+  .tm-meter-track { height: 3px; background: var(--line); border-radius: 3px; position: relative; }
+  .tm-meter-fill { height: 3px; background: var(--accent); border-radius: 3px; position: absolute; left: 0; top: 0; }
+  .tm-meter-dot {
+    width: 9px; height: 9px; border-radius: 50%; background: var(--accent);
+    position: absolute; top: 50%; transform: translate(-50%,-50%);
+    box-shadow: 0 0 0 4px var(--accent-soft);
+  }
+  .tm-meter-labels { display: flex; justify-content: space-between; margin-top: 8px; }
+  .tm-meter-labels span { font-size: 11px; color: var(--ink-faint); font-family: 'JetBrains Mono', monospace; }
+
+  /* ---- Nav ---- */
+  .tm-nav { display: flex; gap: 26px; margin-top: 34px; border-bottom: 1px solid var(--line); }
+  .tm-tab {
+    font-family: 'Space Grotesk', sans-serif; font-size: 14.5px; font-weight: 600; color: var(--ink-faint);
+    padding: 0 0 12px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
+    transition: color 0.15s ease;
+  }
+  .tm-tab:hover { color: var(--ink); }
+  .tm-tab.active { color: var(--ink); border-bottom-color: var(--accent); }
+
+  /* ---- Cards ---- */
+  .tm-section { margin-top: 26px; }
+  .tm-card {
+    background: var(--surface); border-radius: 14px; padding: 24px; border: 1px solid var(--line);
+    margin-bottom: 14px;
+  }
+  .tm-card h3 {
+    font-family: 'Space Grotesk', sans-serif; font-size: 15px; font-weight: 600; color: var(--ink);
+    margin: 0 0 16px;
+  }
+
+  .tm-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+  .tm-field label { display: block; font-size: 11.5px; color: var(--ink-soft); margin-bottom: 5px; font-weight: 600; }
+  .tm-field input, .tm-field select, .tm-field textarea {
+    width: 100%; border: 1px solid var(--line); border-radius: 9px; padding: 9px 11px;
+    font-family: 'Inter', sans-serif; font-size: 14px; outline: none; background: var(--surface); color: var(--ink);
+    transition: border-color 0.12s ease, box-shadow 0.12s ease;
+  }
+  .tm-field input:focus, .tm-field select:focus, .tm-field textarea:focus {
+    border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+
+  /* form section grouping */
+  .tm-form-section { padding: 16px 0; border-bottom: 1px solid var(--line); }
+  .tm-form-section:first-child { padding-top: 0; }
+  .tm-form-section:last-of-type { border-bottom: none; padding-bottom: 0; }
+  .tm-form-section-label {
+    font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--ink-faint); margin-bottom: 12px; font-weight: 600;
+  }
+
+  /* booked status toggle + badge */
+  .tm-toggle {
+    display: inline-flex; align-items: center; gap: 9px; cursor: pointer; user-select: none;
+    padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface);
+    transition: all 0.12s ease; font-size: 13px; font-weight: 600; color: var(--ink-soft);
+  }
+  .tm-toggle .tm-toggle-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-faint); transition: background 0.12s ease; }
+  .tm-toggle.on { border-color: var(--positive); background: #f0f9f5; color: var(--positive); }
+  .tm-toggle.on .tm-toggle-dot { background: var(--positive); }
+  .tm-toggle.small { padding: 5px 11px; font-size: 12px; }
+
+  .tm-traveler-row { display: flex; align-items: center; gap: 12px; margin-bottom: 9px; }
+
+  .tm-badge {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
+    padding: 3px 8px; border-radius: 999px; font-weight: 600; display: inline-block; margin-left: 8px;
+  }
+  .tm-badge.booked { background: #f0f9f5; color: var(--positive); }
+  .tm-badge.pending { background: #fdf3ea; color: #b3701a; }
+
+  .tm-stats-row { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+  .tm-stat-pill {
+    display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; border-radius: 999px;
+    font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 600; border: 1px solid var(--line);
+  }
+  .tm-stat-pill .tm-toggle-dot { width: 7px; height: 7px; border-radius: 50%; }
+  .tm-stat-pill.booked { background: #f0f9f5; color: var(--positive); border-color: #cdeadf; }
+  .tm-stat-pill.booked .tm-toggle-dot { background: var(--positive); }
+  .tm-stat-pill.pending { background: #fdf3ea; color: #b3701a; border-color: #f4ddc0; }
+  .tm-stat-pill.pending .tm-toggle-dot { background: #b3701a; }
+
+  .tm-copyfrom {
+    width: 100%; border: 1px dashed var(--line); border-radius: 9px; padding: 9px 11px;
+    font-family: 'Inter', sans-serif; font-size: 13.5px; outline: none; background: var(--bg); color: var(--ink-soft);
+  }
+  .tm-copyfrom:focus { border-color: var(--accent); }
+
+  .tm-checks { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+  .tm-chip {
+    font-size: 12.5px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line);
+    cursor: pointer; user-select: none; background: var(--bg); font-weight: 600; color: var(--ink-soft);
+    transition: all 0.12s ease;
+  }
+  .tm-chip.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  .tm-btn {
+    font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 13.5px;
+    background: var(--ink); color: #fff; border: none; border-radius: 9px; padding: 10px 18px;
+    cursor: pointer; margin-top: 16px; transition: background 0.12s ease;
+  }
+  .tm-btn:hover { background: #2b2c33; }
+  .tm-btn.accent { background: var(--accent); }
+  .tm-btn.accent:hover { background: #3d38c4; }
+  .tm-btn.ghost {
+    background: transparent; color: var(--negative); padding: 4px 8px; margin-top: 0;
+    font-size: 12px; font-weight: 600;
+  }
+  .tm-btn.ghost:hover { text-decoration: underline; background: transparent; }
+
+  /* people avatars */
+  .tm-people-row { display: flex; flex-wrap: wrap; gap: 10px; }
+  .tm-avatar-pill {
+    display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 6px; border-radius: 999px;
+    border: 1px solid var(--line); background: var(--bg);
+  }
+  .tm-avatar {
+    width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 11px; font-weight: 700; font-family: 'Space Grotesk', sans-serif;
+  }
+  .tm-avatar-pill span.tm-p-name { font-size: 13.5px; font-weight: 600; }
+  .tm-avatar-pill button {
+    border: none; background: transparent; color: var(--ink-faint); cursor: pointer; font-size: 14px;
+    line-height: 1; padding: 0;
+  }
+  .tm-avatar-pill button:hover { color: var(--negative); }
+
+  .tm-add-row { display: flex; gap: 8px; margin-top: 16px; }
+  .tm-add-row input {
+    flex: 1; border: 1px solid var(--line); border-radius: 9px; padding: 9px 12px; font-size: 14px; outline: none;
+  }
+  .tm-add-row input:focus { border-color: var(--accent); }
+
+  /* strips: flights / hotels */
+  .tm-row {
+    display: flex; align-items: center; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line);
+  }
+  .tm-row:last-child { border-bottom: none; }
+  .tm-row-code { font-family: 'JetBrains Mono', monospace; font-size: 15px; font-weight: 700; color: var(--accent); min-width: 100px; }
+  .tm-row-main { flex: 1; }
+  .tm-row-title { font-weight: 600; font-size: 14.5px; font-family: 'Space Grotesk', sans-serif; }
+  .tm-row-name-link { cursor: pointer; }
+  .tm-row-name-link:hover { color: var(--accent); text-decoration: underline; }
+
+  .tm-modal-overlay {
+    position: fixed; inset: 0; background: rgba(21,22,26,0.45); display: flex; align-items: center;
+    justify-content: center; z-index: 1000; padding: 20px;
+  }
+  .tm-modal-box {
+    background: var(--surface); border-radius: 16px; padding: 26px; max-width: 420px; width: 100%;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+  }
+  .tm-modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+  .tm-modal-title { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 19px; }
+  .tm-modal-close { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; width: 30px; height: 30px;
+    display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--ink-soft); font-size: 16px; }
+  .tm-modal-close:hover { color: var(--negative); border-color: var(--negative); }
+  .tm-modal-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+  .tm-modal-row:last-child { border-bottom: none; }
+  .tm-modal-row .k { color: var(--ink-soft); font-weight: 600; }
+  .tm-modal-row .v { font-family: 'JetBrains Mono', monospace; font-weight: 600; }
+  .tm-modal-section-title {
+    font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--ink-faint); margin: 18px 0 4px;
+  }
+  .tm-row-link { font-family: 'Inter', sans-serif; font-weight: 600; font-size: 12.5px; color: var(--accent); text-decoration: none; margin-left: 4px; }
+  .tm-row-link:hover { text-decoration: underline; }
+
+  .tm-split-action {
+    font-size: 11px; font-weight: 600; color: var(--accent); cursor: pointer; text-transform: none;
+    letter-spacing: normal;
+  }
+  .tm-split-action:hover { text-decoration: underline; }
+  .tm-row-sub { font-size: 12.5px; color: var(--ink-soft); margin-top: 3px; }
+
+  /* expense ledger */
+  .tm-ledger-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .tm-ledger-row:last-child { border-bottom: none; }
+  .tm-ledger-desc { flex: 1; font-weight: 600; font-size: 14px; font-family: 'Space Grotesk', sans-serif; }
+  .tm-ledger-meta { font-size: 12px; color: var(--ink-soft); margin-top: 2px; font-weight: 400; font-family: 'Inter', sans-serif; }
+  .tm-ledger-amt { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 14.5px; }
+
+  .tm-balance-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .tm-balance-row:last-child { border-bottom: none; }
+  .tm-balance-amt.pos { color: var(--positive); font-weight: 700; }
+  .tm-balance-amt.neg { color: var(--negative); font-weight: 700; }
+  .tm-settle { font-size: 13.5px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+  .tm-settle:last-child { border-bottom: none; }
+  .tm-settle b { color: var(--ink); }
+
+  .tm-empty { color: var(--ink-faint); font-size: 13.5px; padding: 6px 0; }
+  .tm-note { font-size: 12px; color: var(--ink-faint); margin-top: 10px; }
+  .tm-loading { text-align: center; padding: 60px 20px; color: var(--ink-faint); font-family: 'JetBrains Mono', monospace; }
+
+  .tm-toast {
+    position: fixed; left: 50%; bottom: -80px; transform: translateX(-50%);
+    max-width: 440px; width: calc(100% - 40px); background: var(--ink); color: #fff;
+    padding: 14px 18px; border-radius: 12px; font-size: 13.5px; font-weight: 500;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.25); z-index: 2000; opacity: 0;
+    transition: bottom 0.25s ease, opacity 0.25s ease; line-height: 1.4;
+  }
+  .tm-toast.show { bottom: 24px; opacity: 1; }
+  .tm-toast.error { background: var(--negative); }
+</style>
+
+<div id="tm-root">
+  <div class="tm-wrap" id="tm-app">
+    <div class="tm-loading">loading trip…</div>
+  </div>
+  <div id="tm-toast" class="tm-toast"></div>
+</div>
+
+<script>
+(function(){
+  const COLORS = ['#4b46e5','#12805c','#d1483f','#c9821f','#0f7a8c','#8a4fc7'];
+
+  let state = {
+    trip: { name: '', destination: '', from: '', to: '', start: '', end: '' },
+    people: [],
+    flights: [],
+    hotels: [],
+    expenses: []
+  };
+
+  let activeTab = 'overview';
+  let selectedFlightTraveler = '';
+  let viewingFlightId = '';
+  let loaded = false;
+
+  function uid(){ return Math.random().toString(36).slice(2,10); }
+
+  async function loadData(){
+    try {
+      const res = await fetch('/api/trip-data');
+      if (res.ok) {
+        const data = await res.json();
+        if (data) state = Object.assign(state, data);
+      }
+    } catch (e) {
+      console.log('No existing trip data yet, starting fresh.');
+    }
+    // clean up any legacy duplicate flight rows per traveler, keeping the last entry
+    const seen = {};
+    state.flights.forEach(f => { seen[f.travelerId] = f; });
+    const deduped = Object.values(seen);
+    const hadDupes = deduped.length !== state.flights.length;
+    state.flights = deduped;
+    loaded = true;
+    render();
+    if (hadDupes) saveData();
+  }
+
+  async function saveData(attempt){
+    attempt = attempt || 1;
+    try {
+      const res = await fetch('/api/trip-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(state)
+      });
+      if (!res.ok) throw new Error('Save failed: ' + res.status);
+      hideToast();
+    } catch (e) {
+      console.error('Storage error (attempt ' + attempt + ')', e);
+      if (attempt < 3) {
+        setTimeout(() => saveData(attempt + 1), attempt * 800);
+      } else {
+        showToast("Couldn't save your last change — check your connection and try again.", true);
+      }
+    }
+  }
+
+  function showToast(message, isError){
+    const el = document.getElementById('tm-toast');
+    if (!el) return;
+    el.textContent = message;
+    el.className = 'tm-toast show' + (isError ? ' error' : '');
+  }
+  function hideToast(){
+    const el = document.getElementById('tm-toast');
+    if (el) el.className = 'tm-toast';
+  }
+
+  function fmtMoney(n){
+    const v = Math.round(n * 100) / 100;
+    return (v < 0 ? '-$' : '$') + Math.abs(v).toFixed(2);
+  }
+  function normalizeTime(str){
+    if (!str) return '';
+    str = String(str).trim();
+    let m = str.match(/^(\d{1,2}):(\d{2})$/);
+    if (m) {
+      const h = parseInt(m[1], 10);
+      if (h >= 0 && h <= 23) return String(h).padStart(2,'0') + ':' + m[2];
+    }
+    m = str.match(/^(\d{1,2}):(\d{2})\s*([AaPp][Mm])$/);
+    if (m) {
+      let h = parseInt(m[1], 10);
+      const ap = m[3].toLowerCase();
+      if (ap === 'pm' && h !== 12) h += 12;
+      if (ap === 'am' && h === 12) h = 0;
+      if (h >= 0 && h <= 23) return String(h).padStart(2,'0') + ':' + m[2];
+    }
+    return '';
+  }
+
+  function fmtDate(d){
+    if(!d) return '—';
+    const dt = new Date(d + 'T00:00:00');
+    if (isNaN(dt)) return d;
+    return dt.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+  }
+  function personName(id){ const p = state.people.find(p=>p.id===id); return p ? p.name : 'Unknown'; }
+  function personColor(id){ const p = state.people.find(p=>p.id===id); return p ? p.color : '#888'; }
+  function initials(name){
+    return (name||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  }
+
+  function computeBalances(){
+    const balance = {};
+    state.people.forEach(p => balance[p.id] = 0);
+    state.expenses.forEach(e => {
+      if (!(e.paidBy in balance)) return;
+      const among = e.splitAmong.filter(id => id in balance);
+      if (among.length === 0) return;
+      const share = e.amount / among.length;
+      balance[e.paidBy] += e.amount;
+      among.forEach(id => balance[id] -= share);
+    });
+    return balance;
+  }
+
+  function simplifyDebts(balance){
+    const creditors = [], debtors = [];
+    for (const id in balance){
+      const amt = balance[id];
+      if (amt > 0.01) creditors.push({ id, amt });
+      else if (amt < -0.01) debtors.push({ id, amt: -amt });
+    }
+    creditors.sort((a,b)=>b.amt-a.amt);
+    debtors.sort((a,b)=>b.amt-a.amt);
+    const settlements = [];
+    let i=0, j=0;
+    while (i < debtors.length && j < creditors.length){
+      const pay = Math.min(debtors[i].amt, creditors[j].amt);
+      settlements.push({ from: debtors[i].id, to: creditors[j].id, amount: pay });
+      debtors[i].amt -= pay;
+      creditors[j].amt -= pay;
+      if (debtors[i].amt < 0.01) i++;
+      if (creditors[j].amt < 0.01) j++;
+    }
+    return settlements;
+  }
+
+  function render(){
+    const app = document.getElementById('tm-app');
+    if (!loaded){ app.innerHTML = '<div class="tm-loading">loading trip…</div>'; return; }
+    app.innerHTML = `
+      ${renderHeader()}
+      ${renderNav()}
+      <div class="tm-section">${renderTab()}</div>
+      ${renderFlightModal()}
+    `;
+    attachHandlers();
+  }
+
+  function renderFlightModal(){
+    if (!viewingFlightId) return '';
+    const f = state.flights.find(fl => fl.id === viewingFlightId);
+    if (!f) return '';
+    const hasReturn = f.rAirline || f.rDepTime || f.rArrTime;
+    return `
+      <div class="tm-modal-overlay" id="tm-modal-overlay">
+        <div class="tm-modal-box">
+          <div class="tm-modal-header">
+            <div class="tm-modal-title">${escapeHtml(personName(f.travelerId))}'s flight</div>
+            <div class="tm-modal-close" id="tm-modal-close">&times;</div>
+          </div>
+          <div class="tm-modal-section-title">Outbound</div>
+          <div class="tm-modal-row"><span class="k">Status</span><span class="v" style="color:${f.status==='booked'?'var(--positive)':'#b3701a'}">${f.status==='booked'?'Booked':'Not booked yet'}</span></div>
+          <div class="tm-modal-row"><span class="k">Airline</span><span class="v">${escapeHtml(f.airline||'—')}</span></div>
+          <div class="tm-modal-row"><span class="k">Departure time</span><span class="v">${escapeHtml(f.depTime||'—')}</span></div>
+          <div class="tm-modal-row"><span class="k">Arrival time</span><span class="v">${escapeHtml(f.arrTime||'—')}</span></div>
+          ${hasReturn ? `
+            <div class="tm-modal-section-title">Return</div>
+            <div class="tm-modal-row"><span class="k">Airline</span><span class="v">${escapeHtml(f.rAirline||'—')}</span></div>
+            <div class="tm-modal-row"><span class="k">Departure time</span><span class="v">${escapeHtml(f.rDepTime||'—')}</span></div>
+            <div class="tm-modal-row"><span class="k">Arrival time</span><span class="v">${escapeHtml(f.rArrTime||'—')}</span></div>
+          ` : ''}
+        </div>
+      </div>
+    `;
+  }
+
+  function renderHeader(){
+    const t = state.trip;
+    let meterHtml = '';
+    if (t.start && t.end) {
+      const s = new Date(t.start + 'T00:00:00').getTime();
+      const e = new Date(t.end + 'T00:00:00').getTime();
+      const now = Date.now();
+      let pct = e > s ? ((now - s) / (e - s)) * 100 : 0;
+      pct = Math.max(0, Math.min(100, pct));
+      meterHtml = `
+        <div class="tm-meter">
+          <div class="tm-meter-track">
+            <div class="tm-meter-fill" style="width:${pct}%"></div>
+            <div class="tm-meter-dot" style="left:${pct}%"></div>
+          </div>
+          <div class="tm-meter-labels">
+            <span>${fmtDate(t.start)}</span>
+            <span>${fmtDate(t.end)}</span>
+          </div>
+        </div>
+      `;
+    }
+    return `
+      <div class="tm-eyebrow">Group Trip</div>
+      <input id="tm-trip-name" class="tm-tripname disp" placeholder="Name your trip" value="${escapeAttr(t.name)}" />
+      <input id="tm-trip-dest" class="tm-dest" placeholder="Destination, e.g. Lisbon, Portugal" value="${escapeAttr(t.destination)}" />
+      <div class="tm-route-inline">
+        <input id="tm-trip-from" class="tm-route-input" placeholder="From, e.g. Houston (IAH)" value="${escapeAttr(t.from||'')}" />
+        <span class="tm-arrow">&rarr;</span>
+        <input id="tm-trip-to" class="tm-route-input" placeholder="To, e.g. Lisbon (LIS)" value="${escapeAttr(t.to||'')}" />
+      </div>
+      <div class="tm-dates-inline">
+        <input type="date" id="tm-trip-start" value="${t.start||''}" />
+        <span class="tm-arrow">&rarr;</span>
+        <input type="date" id="tm-trip-end" value="${t.end||''}" />
+      </div>
+      ${meterHtml}
+    `;
+  }
+
+  function renderNav(){
+    const tabs = [['overview','Overview'],['flights','Flights'],['hotels','Hotels'],['expenses','Expenses']];
+    return `<div class="tm-nav">${tabs.map(([id,label]) =>
+      `<div class="tm-tab ${activeTab===id?'active':''}" data-tab="${id}">${label}</div>`
+    ).join('')}</div>`;
+  }
+
+  function renderTab(){
+    if (activeTab === 'overview') return renderOverview();
+    if (activeTab === 'flights') return renderFlights();
+    if (activeTab === 'hotels') return renderHotels();
+    if (activeTab === 'expenses') return renderExpenses();
+    return '';
+  }
+
+  function renderOverview(){
+    return `
+      <div class="tm-card">
+        <h3>Who's going</h3>
+        <div class="tm-people-row" id="tm-people-list">
+          ${state.people.length === 0
+            ? '<div class="tm-empty">No one added yet.</div>'
+            : state.people.map(p => `
+              <div class="tm-avatar-pill">
+                <span class="tm-avatar" style="background:${p.color}">${initials(p.name)}</span>
+                <span class="tm-p-name">${escapeHtml(p.name)}</span>
+                <button data-remove-person="${p.id}">&times;</button>
+              </div>
+            `).join('')
+          }
+        </div>
+        <div class="tm-add-row">
+          <input id="tm-new-person" placeholder="Friend's name" />
+          <button class="tm-btn accent" id="tm-add-person" style="margin-top:0;">Add</button>
+        </div>
+        <div class="tm-note">Shared with anyone who has this link — everyone sees the same roster, flights, hotels, and expenses.</div>
+      </div>
+
+      <div class="tm-card">
+        <h3>Snapshot</h3>
+        <div class="tm-balance-row"><span>Travelers</span><span class="mono">${state.people.length}</span></div>
+        <div class="tm-balance-row"><span>Flights logged</span><span class="mono">${state.flights.length}</span></div>
+        <div class="tm-balance-row"><span>Hotels logged</span><span class="mono">${state.hotels.length}</span></div>
+        <div class="tm-balance-row"><span>Total group spend</span><span class="mono">${fmtMoney(state.expenses.reduce((s,e)=>s+Number(e.amount||0),0))}</span></div>
+      </div>
+    `;
+  }
+
+  function peopleCheckboxes(name, selected){
+    if (state.people.length === 0) return '<div class="tm-empty">Add friends in Overview first.</div>';
+    return `<div class="tm-checks" data-checkgroup="${name}">
+      ${state.people.map(p => `<div class="tm-chip ${selected.includes(p.id)?'on':''}" data-check-id="${p.id}">${escapeHtml(p.name)}</div>`).join('')}
+    </div>`;
+  }
+
+  function renderFlights(){
+    const rest = selectedFlightTraveler ? `
+        <div class="tm-form-section">
+          <div class="tm-form-section-label">Status</div>
+          <div class="tm-grid">
+            <div class="tm-field">
+              <select id="f-status">
+                <option value="pending">Not booked yet</option>
+                <option value="booked">Booked</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        ${state.flights.length > 0 ? `
+        <div class="tm-form-section">
+          <div class="tm-form-section-label">Copy details from another traveler</div>
+          <select class="tm-copyfrom" id="f-copyfrom">
+            <option value="">Start from scratch</option>
+            ${state.flights.map(f => `<option value="${f.id}">${escapeHtml(personName(f.travelerId))} &middot; ${escapeHtml(f.airline||'Flight')}${f.depTime?(' &middot; departs '+escapeHtml(f.depTime)):''}</option>`).join('')}
+          </select>
+        </div>` : ''}
+
+        <div class="tm-form-section">
+          <div class="tm-form-section-label">Flight</div>
+          <div class="tm-grid">
+            <div class="tm-field"><label>Airline</label><input id="f-airline" placeholder="e.g. Delta" /></div>
+          </div>
+        </div>
+
+        <div class="tm-form-section">
+          <div class="tm-form-section-label">Departure &amp; arrival times</div>
+          <div class="tm-grid">
+            <div class="tm-field"><label>Departure time</label><input type="time" id="f-deptime" /></div>
+            <div class="tm-field"><label>Arrival time</label><input type="time" id="f-arrtime" /></div>
+          </div>
+        </div>
+
+        <div class="tm-form-section">
+          <div class="tm-form-section-label">Return flight</div>
+          <div class="tm-grid">
+            <div class="tm-field"><label>Airline</label><input id="fr-airline" placeholder="e.g. Delta" /></div>
+          </div>
+        </div>
+
+        <div class="tm-form-section">
+          <div class="tm-form-section-label">Departure &amp; arrival times</div>
+          <div class="tm-grid">
+            <div class="tm-field"><label>Departure time</label><input type="time" id="fr-deptime" /></div>
+            <div class="tm-field"><label>Arrival time</label><input type="time" id="fr-arrtime" /></div>
+          </div>
+        </div>
+
+        <button class="tm-btn accent" id="tm-add-flight">Add flight for ${escapeHtml(personName(selectedFlightTraveler))}</button>
+    ` : `<div class="tm-empty" style="padding-top:4px;">Select a traveler above to log their flight.</div>`;
+
+    return `
+      <div class="tm-card">
+        <h3>Log a flight</h3>
+
+        <div class="tm-form-section">
+          <div class="tm-form-section-label">Traveler</div>
+          ${state.people.length === 0 ? '<div class="tm-empty">Add friends in Overview first.</div>' :
+            `<div class="tm-checks">
+              ${state.people.map(p => `<div class="tm-chip ${selectedFlightTraveler===p.id?'on':''}" data-traveler-select="${p.id}">${escapeHtml(p.name)}</div>`).join('')}
+            </div>`
+          }
+        </div>
+
+        ${rest}
+      </div>
+      <div class="tm-card">
+        <h3>Itinerary</h3>
+        ${state.flights.length > 0 ? `
+          <div class="tm-stats-row">
+            <div class="tm-stat-pill booked"><span class="tm-toggle-dot"></span>${state.flights.filter(f=>f.status==='booked').length} booked</div>
+            <div class="tm-stat-pill pending"><span class="tm-toggle-dot"></span>${state.flights.filter(f=>f.status!=='booked').length} not booked yet</div>
+          </div>
+        ` : ''}
+        ${state.flights.length === 0 ? '<div class="tm-empty">No flights logged yet.</div>' :
+          state.flights.map(f => `
+          <div class="tm-row">
+            <div class="tm-row-main">
+              <div class="tm-row-title"><span class="tm-row-name-link" data-view-flight="${f.id}">${escapeHtml(personName(f.travelerId))}</span><span class="tm-badge ${f.status==='booked'?'booked':'pending'}">${f.status==='booked'?'Booked':'Pending'}</span></div>
+              <div class="tm-row-sub">${escapeHtml(f.airline||'Flight')}${f.depTime?(' &middot; departs '+escapeHtml(f.depTime)):''}${f.arrTime?(' &middot; arrives '+escapeHtml(f.arrTime)):''}</div>
+              ${(f.rAirline || f.rDepTime || f.rArrTime) ? `
+                <div class="tm-row-sub" style="margin-top:8px; padding-top:8px; border-top:1px dashed var(--line);">
+                  <b>Return:</b> ${escapeHtml(f.rAirline||'Flight')}${f.rDepTime?(' &middot; departs '+escapeHtml(f.rDepTime)):''}${f.rArrTime?(' &middot; arrives '+escapeHtml(f.rArrTime)):''}
+                </div>` : ''
+              }
+            </div>
+            <button class="tm-btn ghost" data-remove-flight="${f.id}">Remove</button>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  function renderHotels(){
+    return `
+      <div class="tm-card">
+        <h3>Log a hotel</h3>
+        <div class="tm-grid">
+          <div class="tm-field"><label>Hotel name</label><input id="h-name" placeholder="e.g. Hotel Avenida" /></div>
+          <div class="tm-field"><label>Location</label><input id="h-location" placeholder="e.g. Lisbon" /></div>
+          <div class="tm-field"><label>Check-in</label><input type="date" id="h-checkin" /></div>
+          <div class="tm-field"><label>Check-out</label><input type="date" id="h-checkout" /></div>
+          <div class="tm-field"><label>Link (hotel or Airbnb)</label><input id="h-url" placeholder="https://..." /></div>
+        </div>
+        <div class="tm-field" style="margin-top:14px;"><label>Guests</label>${peopleCheckboxes('hotel-guests', [])}</div>
+        <button class="tm-btn accent" id="tm-add-hotel">Add hotel</button>
+      </div>
+      <div class="tm-card">
+        <h3>Stays</h3>
+        ${state.hotels.length === 0 ? '<div class="tm-empty">No hotels logged yet.</div>' :
+          state.hotels.slice().sort((a,b)=>(a.checkin||'').localeCompare(b.checkin||'')).map(h => `
+          <div class="tm-row">
+            <div class="tm-row-main">
+              <div class="tm-row-title">${escapeHtml(h.name||'Hotel')}${h.url && /^https?:\/\//i.test(h.url) ? ` <a href="${escapeAttr(h.url)}" target="_blank" rel="noopener noreferrer" class="tm-row-link">View listing &rarr;</a>` : ''}</div>
+              <div class="tm-row-sub">${escapeHtml(h.location||'')} &middot; ${fmtDate(h.checkin)} &rarr; ${fmtDate(h.checkout)}</div>
+              <div class="tm-row-sub">${h.guests.map(personName).join(', ') || 'No guests set'}</div>
+            </div>
+            <button class="tm-btn ghost" data-remove-hotel="${h.id}">Remove</button>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  function renderExpenses(){
+    const balance = computeBalances();
+    const settlements = simplifyDebts(balance);
+    return `
+      <div class="tm-card">
+        <h3>Add an expense</h3>
+        <div class="tm-grid">
+          <div class="tm-field" style="grid-column: span 2;"><label>Description</label><input id="e-desc" placeholder="e.g. Dinner at Taberna" /></div>
+          <div class="tm-field"><label>Amount</label><input type="number" step="0.01" id="e-amount" placeholder="0.00" /></div>
+          <div class="tm-field"><label>Date</label><input type="date" id="e-date" /></div>
+          <div class="tm-field"><label>Paid by</label>
+            <select id="e-paidby"><option value="">Select...</option>${state.people.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')}</select>
+          </div>
+          <div class="tm-field"><label>Category</label>
+            <select id="e-category"><option>Food</option><option>Lodging</option><option>Transport</option><option>Activities</option><option>Other</option></select>
+          </div>
+        </div>
+        <div class="tm-field" style="margin-top:14px;">
+          <label style="display:flex; align-items:center; justify-content:space-between;">
+            <span>Split among</span>
+            <span>
+              <span class="tm-split-action" id="e-split-all">Select all</span>
+              <span style="color:var(--line); margin:0 4px;">&middot;</span>
+              <span class="tm-split-action" id="e-split-none">Clear</span>
+            </span>
+          </label>
+          ${peopleCheckboxes('expense-split', state.people.map(p=>p.id))}
+        </div>
+        <button class="tm-btn accent" id="tm-add-expense">Add expense</button>
+      </div>
+
+      <div class="tm-card">
+        <h3>Ledger</h3>
+        ${state.expenses.length === 0 ? '<div class="tm-empty">No expenses logged yet.</div>' :
+          state.expenses.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')).map(e => `
+          <div class="tm-ledger-row">
+            <div style="flex:1">
+              <div class="tm-ledger-desc">${escapeHtml(e.description||'Expense')}</div>
+              <div class="tm-ledger-meta">${e.category||''} &middot; paid by ${personName(e.paidBy)} &middot; split ${e.splitAmong.length} way${e.splitAmong.length===1?'':'s'} &middot; ${fmtDate(e.date)}</div>
+            </div>
+            <div class="tm-ledger-amt">${fmtMoney(Number(e.amount||0))}</div>
+            <button class="tm-btn ghost" data-remove-expense="${e.id}">&times;</button>
+          </div>
+        `).join('')}
+      </div>
+
+      <div class="tm-card">
+        <h3>Balances</h3>
+        ${state.people.length === 0 ? '<div class="tm-empty">Add friends to see balances.</div>' :
+          state.people.map(p => {
+            const b = balance[p.id] || 0;
+            return `<div class="tm-balance-row">
+              <span><span class="tm-avatar" style="background:${p.color}; width:20px; height:20px; font-size:9px; display:inline-flex; margin-right:8px; vertical-align:middle;">${initials(p.name)}</span>${escapeHtml(p.name)}</span>
+              <span class="tm-balance-amt ${b>=0?'pos':'neg'} mono">${b>=0?'is owed ':'owes '}${fmtMoney(Math.abs(b))}</span>
+            </div>`;
+          }).join('')
+        }
+      </div>
+
+      <div class="tm-card">
+        <h3>Settle up</h3>
+        ${settlements.length === 0 ? '<div class="tm-empty">Everyone is square.</div>' :
+          settlements.map(s => `<div class="tm-settle"><b>${escapeHtml(personName(s.from))}</b> pays <b>${escapeHtml(personName(s.to))}</b> <span class="mono">${fmtMoney(s.amount)}</span></div>`).join('')
+        }
+      </div>
+    `;
+  }
+
+  function escapeHtml(str){ return String(str||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+  function escapeAttr(str){ return escapeHtml(str); }
+
+  function attachHandlers(){
+    const app = document.getElementById('tm-app');
+
+    app.querySelectorAll('[data-view-flight]').forEach(el => {
+      el.addEventListener('click', () => { viewingFlightId = el.dataset.viewFlight; render(); });
+    });
+    const modalClose = document.getElementById('tm-modal-close');
+    if (modalClose) modalClose.addEventListener('click', () => { viewingFlightId = ''; render(); });
+    const modalOverlay = document.getElementById('tm-modal-overlay');
+    if (modalOverlay) modalOverlay.addEventListener('click', (e) => {
+      if (e.target === modalOverlay) { viewingFlightId = ''; render(); }
+    });
+
+    const tripName = document.getElementById('tm-trip-name');
+    const tripDest = document.getElementById('tm-trip-dest');
+    const tripFrom = document.getElementById('tm-trip-from');
+    const tripTo = document.getElementById('tm-trip-to');
+    const tripStart = document.getElementById('tm-trip-start');
+    const tripEnd = document.getElementById('tm-trip-end');
+    if (tripName) tripName.addEventListener('change', e => { state.trip.name = e.target.value; saveData(); });
+    if (tripDest) tripDest.addEventListener('change', e => { state.trip.destination = e.target.value; saveData(); });
+    if (tripFrom) tripFrom.addEventListener('change', e => { state.trip.from = e.target.value; saveData(); });
+    if (tripTo) tripTo.addEventListener('change', e => { state.trip.to = e.target.value; saveData(); });
+    if (tripStart) tripStart.addEventListener('change', e => { state.trip.start = e.target.value; render(); saveData(); });
+    if (tripEnd) tripEnd.addEventListener('change', e => { state.trip.end = e.target.value; render(); saveData(); });
+
+    app.querySelectorAll('.tm-tab').forEach(t => t.addEventListener('click', () => { activeTab = t.dataset.tab; selectedFlightTraveler = ''; render(); }));
+
+    app.querySelectorAll('[data-traveler-select]').forEach(chip => {
+      chip.addEventListener('click', () => {
+        selectedFlightTraveler = chip.dataset.travelerSelect;
+        render();
+      });
+    });
+
+    app.querySelectorAll('[data-checkgroup]').forEach(group => {
+      group.querySelectorAll('.tm-chip').forEach(chip => chip.addEventListener('click', () => chip.classList.toggle('on')));
+    });
+
+    const splitAllBtn = document.getElementById('e-split-all');
+    if (splitAllBtn) splitAllBtn.addEventListener('click', () => {
+      app.querySelectorAll('[data-checkgroup="expense-split"] .tm-chip').forEach(chip => chip.classList.add('on'));
+    });
+    const splitNoneBtn = document.getElementById('e-split-none');
+    if (splitNoneBtn) splitNoneBtn.addEventListener('click', () => {
+      app.querySelectorAll('[data-checkgroup="expense-split"] .tm-chip').forEach(chip => chip.classList.remove('on'));
+    });
+
+    const addPersonBtn = document.getElementById('tm-add-person');
+    if (addPersonBtn) addPersonBtn.addEventListener('click', () => {
+      const input = document.getElementById('tm-new-person');
+      const name = input.value.trim();
+      if (!name) return;
+      state.people.push({ id: uid(), name, color: COLORS[state.people.length % COLORS.length] });
+      render(); saveData();
+    });
+    app.querySelectorAll('[data-remove-person]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.removePerson;
+        state.people = state.people.filter(p => p.id !== id);
+        state.flights = state.flights.filter(f => f.travelerId !== id);
+        state.hotels.forEach(h => h.guests = h.guests.filter(g => g !== id));
+        state.expenses.forEach(e => e.splitAmong = e.splitAmong.filter(s => s !== id));
+        render(); saveData();
+      });
+    });
+
+    const copyFromSelect = document.getElementById('f-copyfrom');
+    if (copyFromSelect) copyFromSelect.addEventListener('change', () => {
+      const src = state.flights.find(f => f.id === copyFromSelect.value);
+      if (!src) return;
+      document.getElementById('f-status').value = src.status || 'pending';
+      document.getElementById('f-airline').value = src.airline || '';
+      document.getElementById('f-deptime').value = normalizeTime(src.depTime);
+      document.getElementById('f-arrtime').value = normalizeTime(src.arrTime);
+      document.getElementById('fr-airline').value = src.rAirline || '';
+      document.getElementById('fr-deptime').value = normalizeTime(src.rDepTime);
+      document.getElementById('fr-arrtime').value = normalizeTime(src.rArrTime);
+    });
+
+    const addFlightBtn = document.getElementById('tm-add-flight');
+    if (addFlightBtn) addFlightBtn.addEventListener('click', () => {
+      const travelerId = selectedFlightTraveler;
+      if (!travelerId) return;
+      const existing = state.flights.find(f => f.travelerId === travelerId);
+      const flight = {
+        id: existing ? existing.id : uid(),
+        travelerId,
+        status: document.getElementById('f-status').value,
+        airline: document.getElementById('f-airline').value.trim(),
+        depTime: document.getElementById('f-deptime').value,
+        arrTime: document.getElementById('f-arrtime').value,
+        rAirline: document.getElementById('fr-airline').value.trim(),
+        rDepTime: document.getElementById('fr-deptime').value,
+        rArrTime: document.getElementById('fr-arrtime').value
+      };
+      if (existing) {
+        Object.assign(existing, flight);
+      } else {
+        state.flights.push(flight);
+      }
+      selectedFlightTraveler = '';
+      render(); saveData();
+    });
+    app.querySelectorAll('[data-remove-flight]').forEach(btn => btn.addEventListener('click', () => {
+      state.flights = state.flights.filter(f => f.id !== btn.dataset.removeFlight);
+      render(); saveData();
+    }));
+
+    const addHotelBtn = document.getElementById('tm-add-hotel');
+    if (addHotelBtn) addHotelBtn.addEventListener('click', () => {
+      const guests = Array.from(app.querySelectorAll('[data-checkgroup="hotel-guests"] .tm-chip.on')).map(c => c.dataset.checkId);
+      const hotel = {
+        id: uid(),
+        name: document.getElementById('h-name').value.trim(),
+        location: document.getElementById('h-location').value.trim(),
+        checkin: document.getElementById('h-checkin').value,
+        checkout: document.getElementById('h-checkout').value,
+        url: document.getElementById('h-url').value.trim(),
+        guests
+      };
+      if (!hotel.name) return;
+      state.hotels.push(hotel);
+      render(); saveData();
+    });
+    app.querySelectorAll('[data-remove-hotel]').forEach(btn => btn.addEventListener('click', () => {
+      state.hotels = state.hotels.filter(h => h.id !== btn.dataset.removeHotel);
+      render(); saveData();
+    }));
+
+    const addExpenseBtn = document.getElementById('tm-add-expense');
+    if (addExpenseBtn) addExpenseBtn.addEventListener('click', () => {
+      const splitAmong = Array.from(app.querySelectorAll('[data-checkgroup="expense-split"] .tm-chip.on')).map(c => c.dataset.checkId);
+      const amount = parseFloat(document.getElementById('e-amount').value);
+      const paidBy = document.getElementById('e-paidby').value;
+      if (!amount || !paidBy || splitAmong.length === 0) return;
+      const expense = {
+        id: uid(),
+        description: document.getElementById('e-desc').value.trim(),
+        amount,
+        date: document.getElementById('e-date').value,
+        paidBy,
+        category: document.getElementById('e-category').value,
+        splitAmong
+      };
+      state.expenses.push(expense);
+      render(); saveData();
+    });
+    app.querySelectorAll('[data-remove-expense]').forEach(btn => btn.addEventListener('click', () => {
+      state.expenses = state.expenses.filter(e => e.id !== btn.dataset.removeExpense);
+      render(); saveData();
+    }));
+  }
+
+  loadData();
+})();
+</script>
+
+</body>
+</html>
