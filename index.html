@@ -324,20 +324,24 @@
 
   async function saveData(attempt){
     attempt = attempt || 1;
+    let serverMessage = '';
     try {
       const res = await fetch('/api/trip-data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(state)
       });
-      if (!res.ok) throw new Error('Save failed: ' + res.status);
+      if (!res.ok) {
+        try { const body = await res.json(); serverMessage = body.error || ''; } catch (parseErr) {}
+        throw new Error('Save failed: ' + res.status + (serverMessage ? ' — ' + serverMessage : ''));
+      }
       hideToast();
     } catch (e) {
       console.error('Storage error (attempt ' + attempt + ')', e);
       if (attempt < 3) {
         setTimeout(() => saveData(attempt + 1), attempt * 800);
       } else {
-        showToast("Couldn't save your last change — check your connection and try again.", true);
+        showToast(serverMessage || "Couldn't save your last change — check your connection and try again.", true);
       }
     }
   }
