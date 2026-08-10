@@ -444,7 +444,7 @@
     if (!viewingFlightId) return '';
     const f = state.flights.find(fl => fl.id === viewingFlightId);
     if (!f) return '';
-    const hasReturn = f.rAirline || f.rDepTime || f.rArrTime;
+    const hasReturn = f.rAirline || f.rDate || f.rDepTime || f.rArrTime;
     return `
       <div class="tm-modal-overlay" id="tm-modal-overlay">
         <div class="tm-modal-box">
@@ -455,11 +455,13 @@
           <div class="tm-modal-section-title">Outbound</div>
           <div class="tm-modal-row"><span class="k">Status</span><span class="v" style="color:${f.status==='booked'?'var(--positive)':'#b3701a'}">${f.status==='booked'?'Booked':'Not booked yet'}</span></div>
           <div class="tm-modal-row"><span class="k">Airline</span><span class="v">${escapeHtml(f.airline||'—')}</span></div>
+          <div class="tm-modal-row"><span class="k">Date</span><span class="v">${f.date ? fmtDate(f.date) : '—'}</span></div>
           <div class="tm-modal-row"><span class="k">Departure time</span><span class="v">${escapeHtml(f.depTime||'—')}</span></div>
           <div class="tm-modal-row"><span class="k">Arrival time</span><span class="v">${escapeHtml(f.arrTime||'—')}</span></div>
           ${hasReturn ? `
             <div class="tm-modal-section-title">Return</div>
             <div class="tm-modal-row"><span class="k">Airline</span><span class="v">${escapeHtml(f.rAirline||'—')}</span></div>
+            <div class="tm-modal-row"><span class="k">Date</span><span class="v">${f.rDate ? fmtDate(f.rDate) : '—'}</span></div>
             <div class="tm-modal-row"><span class="k">Departure time</span><span class="v">${escapeHtml(f.rDepTime||'—')}</span></div>
             <div class="tm-modal-row"><span class="k">Arrival time</span><span class="v">${escapeHtml(f.rArrTime||'—')}</span></div>
           ` : ''}
@@ -470,41 +472,10 @@
 
   function renderHeader(){
     const t = state.trip;
-    let meterHtml = '';
-    if (t.start && t.end) {
-      const s = new Date(t.start + 'T00:00:00').getTime();
-      const e = new Date(t.end + 'T00:00:00').getTime();
-      const now = Date.now();
-      let pct = e > s ? ((now - s) / (e - s)) * 100 : 0;
-      pct = Math.max(0, Math.min(100, pct));
-      meterHtml = `
-        <div class="tm-meter">
-          <div class="tm-meter-track">
-            <div class="tm-meter-fill" style="width:${pct}%"></div>
-            <div class="tm-meter-dot" style="left:${pct}%"></div>
-          </div>
-          <div class="tm-meter-labels">
-            <span>${fmtDate(t.start)}</span>
-            <span>${fmtDate(t.end)}</span>
-          </div>
-        </div>
-      `;
-    }
     return `
       <div class="tm-eyebrow">Group Trip</div>
       <input id="tm-trip-name" class="tm-tripname disp" placeholder="Name your trip" value="${escapeAttr(t.name)}" />
       <input id="tm-trip-dest" class="tm-dest" placeholder="Destination, e.g. Lisbon, Portugal" value="${escapeAttr(t.destination)}" />
-      <div class="tm-route-inline">
-        <input id="tm-trip-from" class="tm-route-input" placeholder="From, e.g. Houston (IAH)" value="${escapeAttr(t.from||'')}" />
-        <span class="tm-arrow">&rarr;</span>
-        <input id="tm-trip-to" class="tm-route-input" placeholder="To, e.g. Lisbon (LIS)" value="${escapeAttr(t.to||'')}" />
-      </div>
-      <div class="tm-dates-inline">
-        <input type="date" id="tm-trip-start" value="${t.start||''}" />
-        <span class="tm-arrow">&rarr;</span>
-        <input type="date" id="tm-trip-end" value="${t.end||''}" />
-      </div>
-      ${meterHtml}
     `;
   }
 
@@ -596,6 +567,7 @@
         <div class="tm-form-section">
           <div class="tm-form-section-label">Departure &amp; arrival times</div>
           <div class="tm-grid">
+            <div class="tm-field"><label>Date</label><input type="date" id="f-date" /></div>
             <div class="tm-field"><label>Departure time</label><input type="time" id="f-deptime" /></div>
             <div class="tm-field"><label>Arrival time</label><input type="time" id="f-arrtime" /></div>
           </div>
@@ -611,6 +583,7 @@
         <div class="tm-form-section">
           <div class="tm-form-section-label">Departure &amp; arrival times</div>
           <div class="tm-grid">
+            <div class="tm-field"><label>Date</label><input type="date" id="fr-date" /></div>
             <div class="tm-field"><label>Departure time</label><input type="time" id="fr-deptime" /></div>
             <div class="tm-field"><label>Arrival time</label><input type="time" id="fr-arrtime" /></div>
           </div>
@@ -643,14 +616,14 @@
           </div>
         ` : ''}
         ${state.flights.length === 0 ? '<div class="tm-empty">No flights logged yet.</div>' :
-          state.flights.map(f => `
+          state.flights.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||'')).map(f => `
           <div class="tm-row">
             <div class="tm-row-main">
               <div class="tm-row-title"><span class="tm-row-name-link" data-view-flight="${f.id}">${escapeHtml(personName(f.travelerId))}</span><span class="tm-badge ${f.status==='booked'?'booked':'pending'}">${f.status==='booked'?'Booked':'Pending'}</span></div>
-              <div class="tm-row-sub">${escapeHtml(f.airline||'Flight')}${f.depTime?(' &middot; departs '+escapeHtml(f.depTime)):''}${f.arrTime?(' &middot; arrives '+escapeHtml(f.arrTime)):''}</div>
-              ${(f.rAirline || f.rDepTime || f.rArrTime) ? `
+              <div class="tm-row-sub">${escapeHtml(f.airline||'Flight')}${f.date?(' &middot; '+fmtDate(f.date)):''}${f.depTime?(' &middot; departs '+escapeHtml(f.depTime)):''}${f.arrTime?(' &middot; arrives '+escapeHtml(f.arrTime)):''}</div>
+              ${(f.rAirline || f.rDate || f.rDepTime || f.rArrTime) ? `
                 <div class="tm-row-sub" style="margin-top:8px; padding-top:8px; border-top:1px dashed var(--line);">
-                  <b>Return:</b> ${escapeHtml(f.rAirline||'Flight')}${f.rDepTime?(' &middot; departs '+escapeHtml(f.rDepTime)):''}${f.rArrTime?(' &middot; arrives '+escapeHtml(f.rArrTime)):''}
+                  <b>Return:</b> ${escapeHtml(f.rAirline||'Flight')}${f.rDate?(' &middot; '+fmtDate(f.rDate)):''}${f.rDepTime?(' &middot; departs '+escapeHtml(f.rDepTime)):''}${f.rArrTime?(' &middot; arrives '+escapeHtml(f.rArrTime)):''}
                 </div>` : ''
               }
             </div>
@@ -836,9 +809,11 @@
       if (!src) return;
       document.getElementById('f-status').value = src.status || 'pending';
       document.getElementById('f-airline').value = src.airline || '';
+      document.getElementById('f-date').value = src.date || '';
       document.getElementById('f-deptime').value = normalizeTime(src.depTime);
       document.getElementById('f-arrtime').value = normalizeTime(src.arrTime);
       document.getElementById('fr-airline').value = src.rAirline || '';
+      document.getElementById('fr-date').value = src.rDate || '';
       document.getElementById('fr-deptime').value = normalizeTime(src.rDepTime);
       document.getElementById('fr-arrtime').value = normalizeTime(src.rArrTime);
     });
@@ -853,9 +828,11 @@
         travelerId,
         status: document.getElementById('f-status').value,
         airline: document.getElementById('f-airline').value.trim(),
+        date: document.getElementById('f-date').value,
         depTime: document.getElementById('f-deptime').value,
         arrTime: document.getElementById('f-arrtime').value,
         rAirline: document.getElementById('fr-airline').value.trim(),
+        rDate: document.getElementById('fr-date').value,
         rDepTime: document.getElementById('fr-deptime').value,
         rArrTime: document.getElementById('fr-arrtime').value
       };
