@@ -111,6 +111,8 @@
   .tm-field input:focus, .tm-field select:focus, .tm-field textarea:focus {
     border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
   }
+  .tm-field textarea { resize: vertical; font-family: 'Inter', sans-serif; line-height: 1.5; min-height: 80px; }
+  .tm-day-notes { white-space: pre-wrap; margin-top: 4px; }
 
   /* form section grouping */
   .tm-form-section { padding: 16px 0; border-bottom: 1px solid var(--line); }
@@ -291,12 +293,15 @@
     people: [],
     flights: [],
     hotels: [],
-    expenses: []
+    expenses: [],
+    days: [],
+    adminPasscode: ''
   };
 
   let activeTab = 'overview';
   let selectedFlightTraveler = '';
   let viewingFlightId = '';
+  let adminUnlocked = false;
   let loaded = false;
 
   function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -444,7 +449,7 @@
     if (!viewingFlightId) return '';
     const f = state.flights.find(fl => fl.id === viewingFlightId);
     if (!f) return '';
-    const hasReturn = f.rAirline || f.rDepTime || f.rArrTime;
+    const hasReturn = f.rAirline || f.rDate || f.rDepTime || f.rArrTime;
     return `
       <div class="tm-modal-overlay" id="tm-modal-overlay">
         <div class="tm-modal-box">
@@ -455,11 +460,13 @@
           <div class="tm-modal-section-title">Outbound</div>
           <div class="tm-modal-row"><span class="k">Status</span><span class="v" style="color:${f.status==='booked'?'var(--positive)':'#b3701a'}">${f.status==='booked'?'Booked':'Not booked yet'}</span></div>
           <div class="tm-modal-row"><span class="k">Airline</span><span class="v">${escapeHtml(f.airline||'—')}</span></div>
+          <div class="tm-modal-row"><span class="k">Date</span><span class="v">${f.date ? fmtDate(f.date) : '—'}</span></div>
           <div class="tm-modal-row"><span class="k">Departure time</span><span class="v">${escapeHtml(f.depTime||'—')}</span></div>
           <div class="tm-modal-row"><span class="k">Arrival time</span><span class="v">${escapeHtml(f.arrTime||'—')}</span></div>
           ${hasReturn ? `
             <div class="tm-modal-section-title">Return</div>
             <div class="tm-modal-row"><span class="k">Airline</span><span class="v">${escapeHtml(f.rAirline||'—')}</span></div>
+            <div class="tm-modal-row"><span class="k">Date</span><span class="v">${f.rDate ? fmtDate(f.rDate) : '—'}</span></div>
             <div class="tm-modal-row"><span class="k">Departure time</span><span class="v">${escapeHtml(f.rDepTime||'—')}</span></div>
             <div class="tm-modal-row"><span class="k">Arrival time</span><span class="v">${escapeHtml(f.rArrTime||'—')}</span></div>
           ` : ''}
@@ -470,46 +477,15 @@
 
   function renderHeader(){
     const t = state.trip;
-    let meterHtml = '';
-    if (t.start && t.end) {
-      const s = new Date(t.start + 'T00:00:00').getTime();
-      const e = new Date(t.end + 'T00:00:00').getTime();
-      const now = Date.now();
-      let pct = e > s ? ((now - s) / (e - s)) * 100 : 0;
-      pct = Math.max(0, Math.min(100, pct));
-      meterHtml = `
-        <div class="tm-meter">
-          <div class="tm-meter-track">
-            <div class="tm-meter-fill" style="width:${pct}%"></div>
-            <div class="tm-meter-dot" style="left:${pct}%"></div>
-          </div>
-          <div class="tm-meter-labels">
-            <span>${fmtDate(t.start)}</span>
-            <span>${fmtDate(t.end)}</span>
-          </div>
-        </div>
-      `;
-    }
     return `
       <div class="tm-eyebrow">Group Trip</div>
       <input id="tm-trip-name" class="tm-tripname disp" placeholder="Name your trip" value="${escapeAttr(t.name)}" />
       <input id="tm-trip-dest" class="tm-dest" placeholder="Destination, e.g. Lisbon, Portugal" value="${escapeAttr(t.destination)}" />
-      <div class="tm-route-inline">
-        <input id="tm-trip-from" class="tm-route-input" placeholder="From, e.g. Houston (IAH)" value="${escapeAttr(t.from||'')}" />
-        <span class="tm-arrow">&rarr;</span>
-        <input id="tm-trip-to" class="tm-route-input" placeholder="To, e.g. Lisbon (LIS)" value="${escapeAttr(t.to||'')}" />
-      </div>
-      <div class="tm-dates-inline">
-        <input type="date" id="tm-trip-start" value="${t.start||''}" />
-        <span class="tm-arrow">&rarr;</span>
-        <input type="date" id="tm-trip-end" value="${t.end||''}" />
-      </div>
-      ${meterHtml}
     `;
   }
 
   function renderNav(){
-    const tabs = [['overview','Overview'],['flights','Flights'],['hotels','Hotels'],['expenses','Expenses']];
+    const tabs = [['overview','Overview'],['flights','Flights'],['hotels','Hotels'],['days','Day-by-Day'],['expenses','Expenses'],['admin','Admin']];
     return `<div class="tm-nav">${tabs.map(([id,label]) =>
       `<div class="tm-tab ${activeTab===id?'active':''}" data-tab="${id}">${label}</div>`
     ).join('')}</div>`;
@@ -519,7 +495,9 @@
     if (activeTab === 'overview') return renderOverview();
     if (activeTab === 'flights') return renderFlights();
     if (activeTab === 'hotels') return renderHotels();
+    if (activeTab === 'days') return renderDays();
     if (activeTab === 'expenses') return renderExpenses();
+    if (activeTab === 'admin') return renderAdmin();
     return '';
   }
 
@@ -596,6 +574,7 @@
         <div class="tm-form-section">
           <div class="tm-form-section-label">Departure &amp; arrival times</div>
           <div class="tm-grid">
+            <div class="tm-field"><label>Date</label><input type="date" id="f-date" /></div>
             <div class="tm-field"><label>Departure time</label><input type="time" id="f-deptime" /></div>
             <div class="tm-field"><label>Arrival time</label><input type="time" id="f-arrtime" /></div>
           </div>
@@ -611,6 +590,7 @@
         <div class="tm-form-section">
           <div class="tm-form-section-label">Departure &amp; arrival times</div>
           <div class="tm-grid">
+            <div class="tm-field"><label>Date</label><input type="date" id="fr-date" /></div>
             <div class="tm-field"><label>Departure time</label><input type="time" id="fr-deptime" /></div>
             <div class="tm-field"><label>Arrival time</label><input type="time" id="fr-arrtime" /></div>
           </div>
@@ -643,14 +623,14 @@
           </div>
         ` : ''}
         ${state.flights.length === 0 ? '<div class="tm-empty">No flights logged yet.</div>' :
-          state.flights.map(f => `
+          state.flights.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||'')).map(f => `
           <div class="tm-row">
             <div class="tm-row-main">
               <div class="tm-row-title"><span class="tm-row-name-link" data-view-flight="${f.id}">${escapeHtml(personName(f.travelerId))}</span><span class="tm-badge ${f.status==='booked'?'booked':'pending'}">${f.status==='booked'?'Booked':'Pending'}</span></div>
-              <div class="tm-row-sub">${escapeHtml(f.airline||'Flight')}${f.depTime?(' &middot; departs '+escapeHtml(f.depTime)):''}${f.arrTime?(' &middot; arrives '+escapeHtml(f.arrTime)):''}</div>
-              ${(f.rAirline || f.rDepTime || f.rArrTime) ? `
+              <div class="tm-row-sub">${escapeHtml(f.airline||'Flight')}${f.date?(' &middot; '+fmtDate(f.date)):''}${f.depTime?(' &middot; departs '+escapeHtml(f.depTime)):''}${f.arrTime?(' &middot; arrives '+escapeHtml(f.arrTime)):''}</div>
+              ${(f.rAirline || f.rDate || f.rDepTime || f.rArrTime) ? `
                 <div class="tm-row-sub" style="margin-top:8px; padding-top:8px; border-top:1px dashed var(--line);">
-                  <b>Return:</b> ${escapeHtml(f.rAirline||'Flight')}${f.rDepTime?(' &middot; departs '+escapeHtml(f.rDepTime)):''}${f.rArrTime?(' &middot; arrives '+escapeHtml(f.rArrTime)):''}
+                  <b>Return:</b> ${escapeHtml(f.rAirline||'Flight')}${f.rDate?(' &middot; '+fmtDate(f.rDate)):''}${f.rDepTime?(' &middot; departs '+escapeHtml(f.rDepTime)):''}${f.rArrTime?(' &middot; arrives '+escapeHtml(f.rArrTime)):''}
                 </div>` : ''
               }
             </div>
@@ -686,6 +666,36 @@
               <div class="tm-row-sub">${h.guests.map(personName).join(', ') || 'No guests set'}</div>
             </div>
             <button class="tm-btn ghost" data-remove-hotel="${h.id}">Remove</button>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  function renderDays(){
+    return `
+      <div class="tm-card">
+        <h3>Add a day</h3>
+        <div class="tm-grid">
+          <div class="tm-field"><label>Date</label><input type="date" id="d-date" /></div>
+          <div class="tm-field"><label>Label (optional)</label><input id="d-label" placeholder="e.g. Arrival day, Beach day" /></div>
+        </div>
+        <div class="tm-field" style="margin-top:12px;">
+          <label>Activities &amp; notes</label>
+          <textarea id="d-notes" rows="4" placeholder="Plans, reservations, ideas for this day..."></textarea>
+        </div>
+        <button class="tm-btn accent" id="tm-add-day">Add day</button>
+      </div>
+      <div class="tm-card">
+        <h3>Itinerary by day</h3>
+        ${state.days.length === 0 ? '<div class="tm-empty">No days added yet.</div>' :
+          state.days.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||'')).map(d => `
+          <div class="tm-row" style="align-items:flex-start;">
+            <div class="tm-row-main">
+              <div class="tm-row-title">${d.date ? fmtDate(d.date) : 'No date set'}${d.label ? ' &middot; '+escapeHtml(d.label) : ''}</div>
+              ${d.notes ? `<div class="tm-row-sub tm-day-notes">${escapeHtml(d.notes)}</div>` : '<div class="tm-row-sub">No notes yet.</div>'}
+            </div>
+            <button class="tm-btn ghost" data-remove-day="${d.id}">Remove</button>
           </div>
         `).join('')}
       </div>
@@ -760,6 +770,71 @@
     `;
   }
 
+  function renderAdmin(){
+    if (!state.adminPasscode) {
+      return `
+        <div class="tm-card">
+          <h3>Set up admin access</h3>
+          <p class="tm-note" style="margin-top:0;">Set a passcode for this trip. Anyone who knows it can unlock the Admin tab from this browser to export data or reset the trip. This isn't strong security — it's meant to keep casual clicks out of the danger zone, not to stop a determined person.</p>
+          <div class="tm-grid">
+            <div class="tm-field"><label>New passcode</label><input type="password" id="admin-pass-new" placeholder="Choose a passcode" /></div>
+          </div>
+          <button class="tm-btn accent" id="admin-set-pass">Set passcode</button>
+        </div>
+      `;
+    }
+    if (!adminUnlocked) {
+      return `
+        <div class="tm-card">
+          <h3>Admin access</h3>
+          <div class="tm-grid">
+            <div class="tm-field"><label>Passcode</label><input type="password" id="admin-pass-enter" placeholder="Enter passcode" /></div>
+          </div>
+          <button class="tm-btn accent" id="admin-unlock">Unlock</button>
+          <div id="admin-unlock-error" class="tm-note" style="color:var(--negative);"></div>
+        </div>
+      `;
+    }
+    const totalSpend = state.expenses.reduce((s,e)=>s+Number(e.amount||0),0);
+    return `
+      <div class="tm-card">
+        <h3>Trip stats</h3>
+        <div class="tm-balance-row"><span>Travelers</span><span class="mono">${state.people.length}</span></div>
+        <div class="tm-balance-row"><span>Flights logged</span><span class="mono">${state.flights.length}</span></div>
+        <div class="tm-balance-row"><span>Hotels logged</span><span class="mono">${state.hotels.length}</span></div>
+        <div class="tm-balance-row"><span>Days planned</span><span class="mono">${state.days.length}</span></div>
+        <div class="tm-balance-row"><span>Expenses logged</span><span class="mono">${state.expenses.length}</span></div>
+        <div class="tm-balance-row"><span>Total group spend</span><span class="mono">${fmtMoney(totalSpend)}</span></div>
+      </div>
+
+      <div class="tm-card">
+        <h3>Export</h3>
+        <p class="tm-note" style="margin-top:0;">Download everything — trip info, travelers, flights, hotels, and expenses — as a JSON file.</p>
+        <button class="tm-btn" id="admin-export">Download trip data (.json)</button>
+      </div>
+
+      <div class="tm-card">
+        <h3>Change passcode</h3>
+        <div class="tm-grid">
+          <div class="tm-field"><label>New passcode</label><input type="password" id="admin-pass-change" placeholder="Choose a new passcode" /></div>
+        </div>
+        <button class="tm-btn" id="admin-change-pass">Update passcode</button>
+      </div>
+
+      <div class="tm-card" style="border-color:#f4c9c4;">
+        <h3 style="color:var(--negative);">Danger zone</h3>
+        <p class="tm-note" style="margin-top:0;">These actions can't be undone. Everyone sharing this trip will see the change immediately.</p>
+        <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:10px;">
+          <button class="tm-btn" style="background:var(--negative);" id="admin-clear-flights">Clear all flights</button>
+          <button class="tm-btn" style="background:var(--negative);" id="admin-clear-hotels">Clear all hotels</button>
+          <button class="tm-btn" style="background:var(--negative);" id="admin-clear-days">Clear all days</button>
+          <button class="tm-btn" style="background:var(--negative);" id="admin-clear-expenses">Clear all expenses</button>
+          <button class="tm-btn" style="background:var(--negative);" id="admin-reset-all">Reset entire trip</button>
+        </div>
+      </div>
+    `;
+  }
+
   function escapeHtml(str){ return String(str||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
   function escapeAttr(str){ return escapeHtml(str); }
 
@@ -774,6 +849,110 @@
     const modalOverlay = document.getElementById('tm-modal-overlay');
     if (modalOverlay) modalOverlay.addEventListener('click', (e) => {
       if (e.target === modalOverlay) { viewingFlightId = ''; render(); }
+    });
+
+    const addDayBtn = document.getElementById('tm-add-day');
+    if (addDayBtn) addDayBtn.addEventListener('click', () => {
+      const day = {
+        id: uid(),
+        date: document.getElementById('d-date').value,
+        label: document.getElementById('d-label').value.trim(),
+        notes: document.getElementById('d-notes').value.trim()
+      };
+      if (!day.date && !day.label && !day.notes) return;
+      state.days.push(day);
+      render(); saveData();
+    });
+    app.querySelectorAll('[data-remove-day]').forEach(btn => btn.addEventListener('click', () => {
+      state.days = state.days.filter(d => d.id !== btn.dataset.removeDay);
+      render(); saveData();
+    }));
+
+    const adminSetPassBtn = document.getElementById('admin-set-pass');
+    if (adminSetPassBtn) adminSetPassBtn.addEventListener('click', () => {
+      const val = document.getElementById('admin-pass-new').value;
+      if (!val) return;
+      state.adminPasscode = val;
+      adminUnlocked = true;
+      render(); saveData();
+    });
+
+    const adminUnlockBtn = document.getElementById('admin-unlock');
+    if (adminUnlockBtn) adminUnlockBtn.addEventListener('click', () => {
+      const val = document.getElementById('admin-pass-enter').value;
+      if (val === state.adminPasscode) {
+        adminUnlocked = true;
+        render();
+      } else {
+        document.getElementById('admin-unlock-error').textContent = 'Incorrect passcode.';
+      }
+    });
+
+    const adminExportBtn = document.getElementById('admin-export');
+    if (adminExportBtn) adminExportBtn.addEventListener('click', () => {
+      const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const nameSlug = (state.trip.name || 'trip').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'trip';
+      a.href = url;
+      a.download = nameSlug + '-data.json';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+
+    const adminChangePassBtn = document.getElementById('admin-change-pass');
+    if (adminChangePassBtn) adminChangePassBtn.addEventListener('click', () => {
+      const val = document.getElementById('admin-pass-change').value;
+      if (!val) return;
+      state.adminPasscode = val;
+      render(); saveData();
+    });
+
+    const adminClearFlightsBtn = document.getElementById('admin-clear-flights');
+    if (adminClearFlightsBtn) adminClearFlightsBtn.addEventListener('click', () => {
+      if (!confirm('Remove every logged flight for everyone on this trip?')) return;
+      state.flights = [];
+      render(); saveData();
+    });
+
+    const adminClearHotelsBtn = document.getElementById('admin-clear-hotels');
+    if (adminClearHotelsBtn) adminClearHotelsBtn.addEventListener('click', () => {
+      if (!confirm('Remove every logged hotel for everyone on this trip?')) return;
+      state.hotels = [];
+      render(); saveData();
+    });
+
+    const adminClearDaysBtn = document.getElementById('admin-clear-days');
+    if (adminClearDaysBtn) adminClearDaysBtn.addEventListener('click', () => {
+      if (!confirm('Remove every day-by-day entry for everyone on this trip?')) return;
+      state.days = [];
+      render(); saveData();
+    });
+
+    const adminClearExpensesBtn = document.getElementById('admin-clear-expenses');
+    if (adminClearExpensesBtn) adminClearExpensesBtn.addEventListener('click', () => {
+      if (!confirm('Remove every logged expense for everyone on this trip? Balances will reset too.')) return;
+      state.expenses = [];
+      render(); saveData();
+    });
+
+    const adminResetAllBtn = document.getElementById('admin-reset-all');
+    if (adminResetAllBtn) adminResetAllBtn.addEventListener('click', () => {
+      if (!confirm('This wipes the entire trip — travelers, flights, hotels, days, and expenses — for everyone. This cannot be undone. Continue?')) return;
+      if (!confirm('Really sure? Type OK to confirm one more time.')) return;
+      const keepPasscode = state.adminPasscode;
+      state = {
+        trip: { name: '', destination: '', from: '', to: '', start: '', end: '' },
+        people: [],
+        flights: [],
+        hotels: [],
+        expenses: [],
+        days: [],
+        adminPasscode: keepPasscode
+      };
+      render(); saveData();
     });
 
     const tripName = document.getElementById('tm-trip-name');
@@ -836,9 +1015,11 @@
       if (!src) return;
       document.getElementById('f-status').value = src.status || 'pending';
       document.getElementById('f-airline').value = src.airline || '';
+      document.getElementById('f-date').value = src.date || '';
       document.getElementById('f-deptime').value = normalizeTime(src.depTime);
       document.getElementById('f-arrtime').value = normalizeTime(src.arrTime);
       document.getElementById('fr-airline').value = src.rAirline || '';
+      document.getElementById('fr-date').value = src.rDate || '';
       document.getElementById('fr-deptime').value = normalizeTime(src.rDepTime);
       document.getElementById('fr-arrtime').value = normalizeTime(src.rArrTime);
     });
@@ -853,9 +1034,11 @@
         travelerId,
         status: document.getElementById('f-status').value,
         airline: document.getElementById('f-airline').value.trim(),
+        date: document.getElementById('f-date').value,
         depTime: document.getElementById('f-deptime').value,
         arrTime: document.getElementById('f-arrtime').value,
         rAirline: document.getElementById('fr-airline').value.trim(),
+        rDate: document.getElementById('fr-date').value,
         rDepTime: document.getElementById('fr-deptime').value,
         rArrTime: document.getElementById('fr-arrtime').value
       };
