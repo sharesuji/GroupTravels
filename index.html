@@ -154,6 +154,17 @@
   .tm-stat-pill.pending { background: #fdf3ea; color: #b3701a; border-color: #f4ddc0; }
   .tm-stat-pill.pending .tm-toggle-dot { background: #b3701a; }
 
+  .tm-group-block {
+    border: 1px solid var(--accent); background: var(--accent-soft); border-radius: 10px;
+    padding: 12px 14px; margin-bottom: 10px;
+  }
+  .tm-group-flight { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13.5px; margin-bottom: 9px; color: var(--ink); }
+  .tm-group-travelers { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tm-group-traveler {
+    display: inline-flex; align-items: center; gap: 6px; background: var(--surface); border: 1px solid var(--line);
+    border-radius: 999px; padding: 4px 10px 4px 4px; font-size: 12.5px; font-weight: 600; color: var(--ink);
+  }
+
   .tm-copyfrom {
     width: 100%; border: 1px dashed var(--line); border-radius: 9px; padding: 9px 11px;
     font-family: 'Inter', sans-serif; font-size: 13.5px; outline: none; background: var(--bg); color: var(--ink-soft);
@@ -193,11 +204,32 @@
     color: #fff; font-size: 11px; font-weight: 700; font-family: 'Space Grotesk', sans-serif;
   }
   .tm-avatar-pill span.tm-p-name { font-size: 13.5px; font-weight: 600; }
-  .tm-avatar-pill button {
+  .tm-p-name.tm-editable { cursor: pointer; border-bottom: 1px dashed transparent; }
+  .tm-p-name.tm-editable:hover { color: var(--accent); border-bottom-color: var(--accent); }
+  .tm-avatar-pill.editing { border-color: var(--accent); background: var(--accent-soft); }
+  .tm-inline-edit {
+    font-family: 'Inter', sans-serif; font-size: 13.5px; font-weight: 600; border: 1px solid var(--accent);
+    border-radius: 6px; padding: 2px 7px; outline: none; width: 100px; background: var(--surface); color: var(--ink);
+  }
+  .tm-avatar-pill button, .tm-pill-action {
     border: none; background: transparent; color: var(--ink-faint); cursor: pointer; font-size: 14px;
     line-height: 1; padding: 0;
   }
-  .tm-avatar-pill button:hover { color: var(--negative); }
+  .tm-avatar-pill button:hover, .tm-pill-action:hover { color: var(--negative); }
+  .tm-pill-action.save { color: var(--positive); font-weight: 700; }
+  .tm-pill-action.save:hover { color: var(--positive); }
+  .tm-edit-link {
+    font-family: 'Inter', sans-serif; font-weight: 600; font-size: 12px; color: var(--accent); cursor: pointer;
+    margin-right: 4px;
+  }
+  .tm-edit-link:hover { text-decoration: underline; }
+  .tm-row-editing { border-color: var(--accent) !important; background: var(--accent-soft); }
+  .tm-form-editing-banner {
+    display: flex; align-items: center; justify-content: space-between; background: var(--accent-soft);
+    border: 1px solid var(--accent); border-radius: 9px; padding: 9px 14px; margin-bottom: 16px;
+    font-size: 13px; font-weight: 600; color: var(--accent);
+  }
+  .tm-form-editing-banner .tm-cancel-edit { cursor: pointer; text-decoration: underline; font-weight: 600; }
 
   .tm-add-row { display: flex; gap: 8px; margin-top: 16px; }
   .tm-add-row input {
@@ -302,6 +334,10 @@
   let selectedFlightTraveler = '';
   let viewingFlightId = '';
   let adminUnlocked = false;
+  let editingPersonId = '';
+  let editingHotelId = '';
+  let editingDayId = '';
+  let editingExpenseId = '';
   let loaded = false;
 
   function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -508,11 +544,18 @@
         <div class="tm-people-row" id="tm-people-list">
           ${state.people.length === 0
             ? '<div class="tm-empty">No one added yet.</div>'
-            : state.people.map(p => `
+            : state.people.map(p => p.id === editingPersonId ? `
+              <div class="tm-avatar-pill editing">
+                <span class="tm-avatar" style="background:${p.color}">${initials(p.name)}</span>
+                <input class="tm-inline-edit" id="edit-person-input" value="${escapeAttr(p.name)}" />
+                <button class="tm-pill-action save" data-save-person="${p.id}">&check;</button>
+                <button class="tm-pill-action" data-cancel-person>&times;</button>
+              </div>
+            ` : `
               <div class="tm-avatar-pill">
                 <span class="tm-avatar" style="background:${p.color}">${initials(p.name)}</span>
-                <span class="tm-p-name">${escapeHtml(p.name)}</span>
-                <button data-remove-person="${p.id}">&times;</button>
+                <span class="tm-p-name tm-editable" data-edit-person="${p.id}">${escapeHtml(p.name)}</span>
+                <button class="tm-pill-action" data-remove-person="${p.id}">&times;</button>
               </div>
             `).join('')
           }
@@ -521,7 +564,7 @@
           <input id="tm-new-person" placeholder="Friend's name" />
           <button class="tm-btn accent" id="tm-add-person" style="margin-top:0;">Add</button>
         </div>
-        <div class="tm-note">Shared with anyone who has this link — everyone sees the same roster, flights, hotels, and expenses.</div>
+        <div class="tm-note">Shared with anyone who has this link — everyone sees the same roster, flights, hotels, and expenses. Click a friend's name to rename them.</div>
       </div>
 
       <div class="tm-card">
@@ -541,15 +584,84 @@
     </div>`;
   }
 
+  function flightGroupKey(f, dir){
+    const parts = dir === 'outbound'
+      ? [f.airline||'', f.date||'', f.depTime||'', f.arrTime||'']
+      : [f.rAirline||'', f.rDate||'', f.rDepTime||'', f.rArrTime||''];
+    return parts.join('|').toLowerCase().trim();
+  }
+
+  function buildFlightGroups(){
+    const outboundGroups = {};
+    const returnGroups = {};
+    state.flights.forEach(f => {
+      if (f.airline || f.date || f.depTime || f.arrTime) {
+        const key = flightGroupKey(f, 'outbound');
+        if (!outboundGroups[key]) outboundGroups[key] = { airline: f.airline, date: f.date, depTime: f.depTime, arrTime: f.arrTime, travelers: [] };
+        outboundGroups[key].travelers.push(f);
+      }
+      if (f.rAirline || f.rDate || f.rDepTime || f.rArrTime) {
+        const key = flightGroupKey(f, 'return');
+        if (!returnGroups[key]) returnGroups[key] = { airline: f.rAirline, date: f.rDate, depTime: f.rDepTime, arrTime: f.rArrTime, travelers: [] };
+        returnGroups[key].travelers.push(f);
+      }
+    });
+    return { outbound: Object.values(outboundGroups), ret: Object.values(returnGroups) };
+  }
+
+  function renderGroupSection(label, groupsList){
+    if (groupsList.length === 0) return '';
+    const together = groupsList.filter(g => g.travelers.length > 1).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+    const solo = groupsList.filter(g => g.travelers.length === 1).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+    if (together.length === 0 && solo.length === 0) return '';
+    return `
+      <div style="margin-bottom:18px;">
+        <div class="tm-form-section-label" style="margin-bottom:10px;">${label}</div>
+        ${together.map(g => `
+          <div class="tm-group-block">
+            <div class="tm-group-flight">${escapeHtml(g.airline||'Flight')}${g.date?(' &middot; '+fmtDate(g.date)):''}${g.depTime?(' &middot; departs '+escapeHtml(g.depTime)):''}${g.arrTime?(' &middot; arrives '+escapeHtml(g.arrTime)):''}</div>
+            <div class="tm-group-travelers">
+              ${g.travelers.map(t => `
+                <span class="tm-group-traveler">
+                  <span class="tm-avatar" style="background:${personColor(t.travelerId)}">${initials(personName(t.travelerId))}</span>
+                  ${escapeHtml(personName(t.travelerId))}
+                  <span class="tm-badge ${t.status==='booked'?'booked':'pending'}">${t.status==='booked'?'Booked':'Pending'}</span>
+                </span>
+              `).join('')}
+            </div>
+          </div>
+        `).join('')}
+        ${solo.length === 0 ? '' : `<div class="tm-note" style="margin-top:${together.length?'10px':'0'};">Flying separately: ${solo.map(g => escapeHtml(personName(g.travelers[0].travelerId)) + (g.airline || g.date ? ' (' + [escapeHtml(g.airline||''), g.date?fmtDate(g.date):''].filter(Boolean).join(', ') + ')' : '')).join(' &middot; ')}</div>`}
+      </div>
+    `;
+  }
+
+  function renderFlightSummary(){
+    if (state.flights.length === 0) return '';
+    const groups = buildFlightGroups();
+    const outboundHtml = renderGroupSection('Outbound', groups.outbound);
+    const returnHtml = renderGroupSection('Return', groups.ret);
+    if (!outboundHtml && !returnHtml) return '';
+    return `
+      <div class="tm-card">
+        <h3>At a glance</h3>
+        ${outboundHtml}
+        ${returnHtml}
+      </div>
+    `;
+  }
+
   function renderFlights(){
+    const existingFlight = selectedFlightTraveler ? state.flights.find(f => f.travelerId === selectedFlightTraveler) : null;
     const rest = selectedFlightTraveler ? `
+        ${existingFlight ? `<div class="tm-form-editing-banner"><span>Editing ${escapeHtml(personName(selectedFlightTraveler))}'s flight</span><span class="tm-cancel-edit" data-traveler-select="">Cancel</span></div>` : ''}
         <div class="tm-form-section">
           <div class="tm-form-section-label">Status</div>
           <div class="tm-grid">
             <div class="tm-field">
               <select id="f-status">
-                <option value="pending">Not booked yet</option>
-                <option value="booked">Booked</option>
+                <option value="pending" ${existingFlight && existingFlight.status!=='booked' ? 'selected':''}>Not booked yet</option>
+                <option value="booked" ${existingFlight && existingFlight.status==='booked' ? 'selected':''}>Booked</option>
               </select>
             </div>
           </div>
@@ -560,54 +672,55 @@
           <div class="tm-form-section-label">Copy details from another traveler</div>
           <select class="tm-copyfrom" id="f-copyfrom">
             <option value="">Start from scratch</option>
-            ${state.flights.map(f => `<option value="${f.id}">${escapeHtml(personName(f.travelerId))} &middot; ${escapeHtml(f.airline||'Flight')}${f.depTime?(' &middot; departs '+escapeHtml(f.depTime)):''}</option>`).join('')}
+            ${state.flights.filter(f=>f.travelerId!==selectedFlightTraveler).map(f => `<option value="${f.id}">${escapeHtml(personName(f.travelerId))} &middot; ${escapeHtml(f.airline||'Flight')}${f.depTime?(' &middot; departs '+escapeHtml(f.depTime)):''}</option>`).join('')}
           </select>
         </div>` : ''}
 
         <div class="tm-form-section">
           <div class="tm-form-section-label">Flight</div>
           <div class="tm-grid">
-            <div class="tm-field"><label>Airline</label><input id="f-airline" placeholder="e.g. Delta" /></div>
+            <div class="tm-field"><label>Airline</label><input id="f-airline" placeholder="e.g. Delta" value="${escapeAttr(existingFlight ? (existingFlight.airline||'') : '')}" /></div>
           </div>
         </div>
 
         <div class="tm-form-section">
           <div class="tm-form-section-label">Departure &amp; arrival times</div>
           <div class="tm-grid">
-            <div class="tm-field"><label>Date</label><input type="date" id="f-date" /></div>
-            <div class="tm-field"><label>Departure time</label><input type="time" id="f-deptime" /></div>
-            <div class="tm-field"><label>Arrival time</label><input type="time" id="f-arrtime" /></div>
+            <div class="tm-field"><label>Date</label><input type="date" id="f-date" value="${existingFlight ? (existingFlight.date||'') : ''}" /></div>
+            <div class="tm-field"><label>Departure time</label><input type="time" id="f-deptime" value="${existingFlight ? (existingFlight.depTime||'') : ''}" /></div>
+            <div class="tm-field"><label>Arrival time</label><input type="time" id="f-arrtime" value="${existingFlight ? (existingFlight.arrTime||'') : ''}" /></div>
           </div>
         </div>
 
         <div class="tm-form-section">
           <div class="tm-form-section-label">Return flight</div>
           <div class="tm-grid">
-            <div class="tm-field"><label>Airline</label><input id="fr-airline" placeholder="e.g. Delta" /></div>
+            <div class="tm-field"><label>Airline</label><input id="fr-airline" placeholder="e.g. Delta" value="${escapeAttr(existingFlight ? (existingFlight.rAirline||'') : '')}" /></div>
           </div>
         </div>
 
         <div class="tm-form-section">
           <div class="tm-form-section-label">Departure &amp; arrival times</div>
           <div class="tm-grid">
-            <div class="tm-field"><label>Date</label><input type="date" id="fr-date" /></div>
-            <div class="tm-field"><label>Departure time</label><input type="time" id="fr-deptime" /></div>
-            <div class="tm-field"><label>Arrival time</label><input type="time" id="fr-arrtime" /></div>
+            <div class="tm-field"><label>Date</label><input type="date" id="fr-date" value="${existingFlight ? (existingFlight.rDate||'') : ''}" /></div>
+            <div class="tm-field"><label>Departure time</label><input type="time" id="fr-deptime" value="${existingFlight ? (existingFlight.rDepTime||'') : ''}" /></div>
+            <div class="tm-field"><label>Arrival time</label><input type="time" id="fr-arrtime" value="${existingFlight ? (existingFlight.rArrTime||'') : ''}" /></div>
           </div>
         </div>
 
-        <button class="tm-btn accent" id="tm-add-flight">Add flight for ${escapeHtml(personName(selectedFlightTraveler))}</button>
-    ` : `<div class="tm-empty" style="padding-top:4px;">Select a traveler above to log their flight.</div>`;
+        <button class="tm-btn accent" id="tm-add-flight">${existingFlight ? 'Save changes for ' : 'Add flight for '}${escapeHtml(personName(selectedFlightTraveler))}</button>
+    ` : `<div class="tm-empty" style="padding-top:4px;">Select a traveler above to log or edit their flight.</div>`;
 
     return `
-      <div class="tm-card">
+      ${renderFlightSummary()}
+      <div class="tm-card" id="flight-form-card">
         <h3>Log a flight</h3>
 
         <div class="tm-form-section">
           <div class="tm-form-section-label">Traveler</div>
           ${state.people.length === 0 ? '<div class="tm-empty">Add friends in Overview first.</div>' :
             `<div class="tm-checks">
-              ${state.people.map(p => `<div class="tm-chip ${selectedFlightTraveler===p.id?'on':''}" data-traveler-select="${p.id}">${escapeHtml(p.name)}</div>`).join('')}
+              ${state.people.map(p => `<div class="tm-chip ${selectedFlightTraveler===p.id?'on':''}" data-traveler-select="${p.id}">${escapeHtml(p.name)}${state.flights.some(f=>f.travelerId===p.id) ? ' &#9998;' : ''}</div>`).join('')}
             </div>`
           }
         </div>
@@ -624,7 +737,7 @@
         ` : ''}
         ${state.flights.length === 0 ? '<div class="tm-empty">No flights logged yet.</div>' :
           state.flights.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||'')).map(f => `
-          <div class="tm-row">
+          <div class="tm-row ${f.travelerId===selectedFlightTraveler?'tm-row-editing':''}">
             <div class="tm-row-main">
               <div class="tm-row-title"><span class="tm-row-name-link" data-view-flight="${f.id}">${escapeHtml(personName(f.travelerId))}</span><span class="tm-badge ${f.status==='booked'?'booked':'pending'}">${f.status==='booked'?'Booked':'Pending'}</span></div>
               <div class="tm-row-sub">${escapeHtml(f.airline||'Flight')}${f.date?(' &middot; '+fmtDate(f.date)):''}${f.depTime?(' &middot; departs '+escapeHtml(f.depTime)):''}${f.arrTime?(' &middot; arrives '+escapeHtml(f.arrTime)):''}</div>
@@ -634,6 +747,7 @@
                 </div>` : ''
               }
             </div>
+            <span class="tm-edit-link" data-edit-flight="${f.travelerId}">Edit</span>
             <button class="tm-btn ghost" data-remove-flight="${f.id}">Remove</button>
           </div>
         `).join('')}
@@ -642,29 +756,36 @@
   }
 
   function renderHotels(){
+    const editing = state.hotels.find(h => h.id === editingHotelId);
     return `
-      <div class="tm-card">
-        <h3>Log a hotel</h3>
+      <div class="tm-card" id="hotel-form-card">
+        <h3>${editing ? 'Edit hotel' : 'Log a hotel'}</h3>
+        ${editing ? `<div class="tm-form-editing-banner"><span>Editing "${escapeHtml(editing.name||'this hotel')}"</span><span class="tm-cancel-edit" id="cancel-hotel-edit">Cancel</span></div>` : ''}
         <div class="tm-grid">
-          <div class="tm-field"><label>Hotel name</label><input id="h-name" placeholder="e.g. Hotel Avenida" /></div>
-          <div class="tm-field"><label>Location</label><input id="h-location" placeholder="e.g. Lisbon" /></div>
-          <div class="tm-field"><label>Check-in</label><input type="date" id="h-checkin" /></div>
-          <div class="tm-field"><label>Check-out</label><input type="date" id="h-checkout" /></div>
-          <div class="tm-field"><label>Link (hotel or Airbnb)</label><input id="h-url" placeholder="https://..." /></div>
+          <div class="tm-field"><label>Hotel name</label><input id="h-name" placeholder="e.g. Hotel Avenida" value="${escapeAttr(editing ? editing.name : '')}" /></div>
+          <div class="tm-field"><label>Location</label><input id="h-location" placeholder="e.g. Lisbon" value="${escapeAttr(editing ? editing.location : '')}" /></div>
+          <div class="tm-field"><label>Check-in</label><input type="date" id="h-checkin" value="${editing ? (editing.checkin||'') : ''}" /></div>
+          <div class="tm-field"><label>Check-out</label><input type="date" id="h-checkout" value="${editing ? (editing.checkout||'') : ''}" /></div>
         </div>
-        <div class="tm-field" style="margin-top:14px;"><label>Guests</label>${peopleCheckboxes('hotel-guests', [])}</div>
-        <button class="tm-btn accent" id="tm-add-hotel">Add hotel</button>
+        <div class="tm-field" style="margin-top:14px;">
+          <label>Notes</label>
+          <textarea id="h-notes" rows="3" placeholder="Anything worth knowing — parking, wifi, check-in instructions, booking reference...">${escapeHtml(editing ? (editing.notes||'') : '')}</textarea>
+        </div>
+        <div class="tm-field" style="margin-top:14px;"><label>Guests</label>${peopleCheckboxes('hotel-guests', editing ? editing.guests : [])}</div>
+        <button class="tm-btn accent" id="tm-add-hotel">${editing ? 'Save changes' : 'Add hotel'}</button>
       </div>
       <div class="tm-card">
         <h3>Stays</h3>
         ${state.hotels.length === 0 ? '<div class="tm-empty">No hotels logged yet.</div>' :
           state.hotels.slice().sort((a,b)=>(a.checkin||'').localeCompare(b.checkin||'')).map(h => `
-          <div class="tm-row">
+          <div class="tm-row ${h.id===editingHotelId?'tm-row-editing':''}">
             <div class="tm-row-main">
-              <div class="tm-row-title">${escapeHtml(h.name||'Hotel')}${h.url && /^https?:\/\//i.test(h.url) ? ` <a href="${escapeAttr(h.url)}" target="_blank" rel="noopener noreferrer" class="tm-row-link">View listing &rarr;</a>` : ''}</div>
+              <div class="tm-row-title">${escapeHtml(h.name||'Hotel')}${(h.name || h.location) ? ` <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([h.name, h.location].filter(Boolean).join(' '))}" target="_blank" rel="noopener noreferrer" class="tm-row-link">View on map &rarr;</a>` : ''}</div>
               <div class="tm-row-sub">${escapeHtml(h.location||'')} &middot; ${fmtDate(h.checkin)} &rarr; ${fmtDate(h.checkout)}</div>
               <div class="tm-row-sub">${h.guests.map(personName).join(', ') || 'No guests set'}</div>
+              ${h.notes ? `<div class="tm-row-sub tm-day-notes">${escapeHtml(h.notes)}</div>` : ''}
             </div>
+            <span class="tm-edit-link" data-edit-hotel="${h.id}">Edit</span>
             <button class="tm-btn ghost" data-remove-hotel="${h.id}">Remove</button>
           </div>
         `).join('')}
@@ -673,28 +794,31 @@
   }
 
   function renderDays(){
+    const editing = state.days.find(d => d.id === editingDayId);
     return `
-      <div class="tm-card">
-        <h3>Add a day</h3>
+      <div class="tm-card" id="day-form-card">
+        <h3>${editing ? 'Edit day' : 'Add a day'}</h3>
+        ${editing ? `<div class="tm-form-editing-banner"><span>Editing ${editing.date ? fmtDate(editing.date) : 'this day'}</span><span class="tm-cancel-edit" id="cancel-day-edit">Cancel</span></div>` : ''}
         <div class="tm-grid">
-          <div class="tm-field"><label>Date</label><input type="date" id="d-date" /></div>
-          <div class="tm-field"><label>Label (optional)</label><input id="d-label" placeholder="e.g. Arrival day, Beach day" /></div>
+          <div class="tm-field"><label>Date</label><input type="date" id="d-date" value="${editing ? (editing.date||'') : ''}" /></div>
+          <div class="tm-field"><label>Label (optional)</label><input id="d-label" placeholder="e.g. Arrival day, Beach day" value="${escapeAttr(editing ? (editing.label||'') : '')}" /></div>
         </div>
         <div class="tm-field" style="margin-top:12px;">
           <label>Activities &amp; notes</label>
-          <textarea id="d-notes" rows="4" placeholder="Plans, reservations, ideas for this day..."></textarea>
+          <textarea id="d-notes" rows="4" placeholder="Plans, reservations, ideas for this day...">${escapeHtml(editing ? (editing.notes||'') : '')}</textarea>
         </div>
-        <button class="tm-btn accent" id="tm-add-day">Add day</button>
+        <button class="tm-btn accent" id="tm-add-day">${editing ? 'Save changes' : 'Add day'}</button>
       </div>
       <div class="tm-card">
         <h3>Itinerary by day</h3>
         ${state.days.length === 0 ? '<div class="tm-empty">No days added yet.</div>' :
           state.days.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||'')).map(d => `
-          <div class="tm-row" style="align-items:flex-start;">
+          <div class="tm-row ${d.id===editingDayId?'tm-row-editing':''}" style="align-items:flex-start;">
             <div class="tm-row-main">
               <div class="tm-row-title">${d.date ? fmtDate(d.date) : 'No date set'}${d.label ? ' &middot; '+escapeHtml(d.label) : ''}</div>
               ${d.notes ? `<div class="tm-row-sub tm-day-notes">${escapeHtml(d.notes)}</div>` : '<div class="tm-row-sub">No notes yet.</div>'}
             </div>
+            <span class="tm-edit-link" data-edit-day="${d.id}">Edit</span>
             <button class="tm-btn ghost" data-remove-day="${d.id}">Remove</button>
           </div>
         `).join('')}
@@ -705,18 +829,21 @@
   function renderExpenses(){
     const balance = computeBalances();
     const settlements = simplifyDebts(balance);
+    const editing = state.expenses.find(e => e.id === editingExpenseId);
+    const categories = ['Food','Lodging','Transport','Activities','Other'];
     return `
-      <div class="tm-card">
-        <h3>Add an expense</h3>
+      <div class="tm-card" id="expense-form-card">
+        <h3>${editing ? 'Edit expense' : 'Add an expense'}</h3>
+        ${editing ? `<div class="tm-form-editing-banner"><span>Editing "${escapeHtml(editing.description||'this expense')}"</span><span class="tm-cancel-edit" id="cancel-expense-edit">Cancel</span></div>` : ''}
         <div class="tm-grid">
-          <div class="tm-field" style="grid-column: span 2;"><label>Description</label><input id="e-desc" placeholder="e.g. Dinner at Taberna" /></div>
-          <div class="tm-field"><label>Amount</label><input type="number" step="0.01" id="e-amount" placeholder="0.00" /></div>
-          <div class="tm-field"><label>Date</label><input type="date" id="e-date" /></div>
+          <div class="tm-field" style="grid-column: span 2;"><label>Description</label><input id="e-desc" placeholder="e.g. Dinner at Taberna" value="${escapeAttr(editing ? editing.description : '')}" /></div>
+          <div class="tm-field"><label>Amount</label><input type="number" step="0.01" id="e-amount" placeholder="0.00" value="${editing ? editing.amount : ''}" /></div>
+          <div class="tm-field"><label>Date</label><input type="date" id="e-date" value="${editing ? (editing.date||'') : ''}" /></div>
           <div class="tm-field"><label>Paid by</label>
-            <select id="e-paidby"><option value="">Select...</option>${state.people.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')}</select>
+            <select id="e-paidby"><option value="">Select...</option>${state.people.map(p => `<option value="${p.id}" ${editing && editing.paidBy===p.id ? 'selected' : ''}>${escapeHtml(p.name)}</option>`).join('')}</select>
           </div>
           <div class="tm-field"><label>Category</label>
-            <select id="e-category"><option>Food</option><option>Lodging</option><option>Transport</option><option>Activities</option><option>Other</option></select>
+            <select id="e-category">${categories.map(c => `<option ${editing && editing.category===c ? 'selected' : ''}>${c}</option>`).join('')}</select>
           </div>
         </div>
         <div class="tm-field" style="margin-top:14px;">
@@ -728,21 +855,22 @@
               <span class="tm-split-action" id="e-split-none">Clear</span>
             </span>
           </label>
-          ${peopleCheckboxes('expense-split', state.people.map(p=>p.id))}
+          ${peopleCheckboxes('expense-split', editing ? editing.splitAmong : state.people.map(p=>p.id))}
         </div>
-        <button class="tm-btn accent" id="tm-add-expense">Add expense</button>
+        <button class="tm-btn accent" id="tm-add-expense">${editing ? 'Save changes' : 'Add expense'}</button>
       </div>
 
       <div class="tm-card">
         <h3>Ledger</h3>
         ${state.expenses.length === 0 ? '<div class="tm-empty">No expenses logged yet.</div>' :
           state.expenses.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')).map(e => `
-          <div class="tm-ledger-row">
+          <div class="tm-ledger-row ${e.id===editingExpenseId?'tm-row-editing':''}">
             <div style="flex:1">
               <div class="tm-ledger-desc">${escapeHtml(e.description||'Expense')}</div>
               <div class="tm-ledger-meta">${e.category||''} &middot; paid by ${personName(e.paidBy)} &middot; split ${e.splitAmong.length} way${e.splitAmong.length===1?'':'s'} &middot; ${fmtDate(e.date)}</div>
             </div>
             <div class="tm-ledger-amt">${fmtMoney(Number(e.amount||0))}</div>
+            <span class="tm-edit-link" data-edit-expense="${e.id}">Edit</span>
             <button class="tm-btn ghost" data-remove-expense="${e.id}">&times;</button>
           </div>
         `).join('')}
@@ -853,20 +981,37 @@
 
     const addDayBtn = document.getElementById('tm-add-day');
     if (addDayBtn) addDayBtn.addEventListener('click', () => {
+      const existing = state.days.find(d => d.id === editingDayId);
       const day = {
-        id: uid(),
+        id: existing ? existing.id : uid(),
         date: document.getElementById('d-date').value,
         label: document.getElementById('d-label').value.trim(),
         notes: document.getElementById('d-notes').value.trim()
       };
       if (!day.date && !day.label && !day.notes) return;
-      state.days.push(day);
+      if (existing) {
+        Object.assign(existing, day);
+      } else {
+        state.days.push(day);
+      }
+      editingDayId = '';
       render(); saveData();
     });
     app.querySelectorAll('[data-remove-day]').forEach(btn => btn.addEventListener('click', () => {
       state.days = state.days.filter(d => d.id !== btn.dataset.removeDay);
+      if (editingDayId === btn.dataset.removeDay) editingDayId = '';
       render(); saveData();
     }));
+    app.querySelectorAll('[data-edit-day]').forEach(el => {
+      el.addEventListener('click', () => {
+        editingDayId = el.dataset.editDay;
+        render();
+        const card = document.getElementById('day-form-card');
+        if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+    const cancelDayEdit = document.getElementById('cancel-day-edit');
+    if (cancelDayEdit) cancelDayEdit.addEventListener('click', () => { editingDayId = ''; render(); });
 
     const adminSetPassBtn = document.getElementById('admin-set-pass');
     if (adminSetPassBtn) adminSetPassBtn.addEventListener('click', () => {
@@ -914,6 +1059,7 @@
     if (adminClearFlightsBtn) adminClearFlightsBtn.addEventListener('click', () => {
       if (!confirm('Remove every logged flight for everyone on this trip?')) return;
       state.flights = [];
+      selectedFlightTraveler = '';
       render(); saveData();
     });
 
@@ -921,6 +1067,7 @@
     if (adminClearHotelsBtn) adminClearHotelsBtn.addEventListener('click', () => {
       if (!confirm('Remove every logged hotel for everyone on this trip?')) return;
       state.hotels = [];
+      editingHotelId = '';
       render(); saveData();
     });
 
@@ -928,6 +1075,7 @@
     if (adminClearDaysBtn) adminClearDaysBtn.addEventListener('click', () => {
       if (!confirm('Remove every day-by-day entry for everyone on this trip?')) return;
       state.days = [];
+      editingDayId = '';
       render(); saveData();
     });
 
@@ -935,6 +1083,7 @@
     if (adminClearExpensesBtn) adminClearExpensesBtn.addEventListener('click', () => {
       if (!confirm('Remove every logged expense for everyone on this trip? Balances will reset too.')) return;
       state.expenses = [];
+      editingExpenseId = '';
       render(); saveData();
     });
 
@@ -952,6 +1101,7 @@
         days: [],
         adminPasscode: keepPasscode
       };
+      editingPersonId = ''; editingHotelId = ''; editingDayId = ''; editingExpenseId = ''; selectedFlightTraveler = '';
       render(); saveData();
     });
 
@@ -974,6 +1124,15 @@
       chip.addEventListener('click', () => {
         selectedFlightTraveler = chip.dataset.travelerSelect;
         render();
+      });
+    });
+
+    app.querySelectorAll('[data-edit-flight]').forEach(el => {
+      el.addEventListener('click', () => {
+        selectedFlightTraveler = el.dataset.editFlight;
+        render();
+        const card = document.getElementById('flight-form-card');
+        if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
       });
     });
 
@@ -1008,6 +1167,34 @@
         render(); saveData();
       });
     });
+    app.querySelectorAll('[data-edit-person]').forEach(el => {
+      el.addEventListener('click', () => { editingPersonId = el.dataset.editPerson; render(); });
+    });
+    app.querySelectorAll('[data-save-person]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.savePerson;
+        const input = document.getElementById('edit-person-input');
+        const newName = input.value.trim();
+        if (newName) {
+          const p = state.people.find(p => p.id === id);
+          if (p) p.name = newName;
+        }
+        editingPersonId = '';
+        render(); saveData();
+      });
+    });
+    app.querySelectorAll('[data-cancel-person]').forEach(btn => {
+      btn.addEventListener('click', () => { editingPersonId = ''; render(); });
+    });
+    const editPersonInput = document.getElementById('edit-person-input');
+    if (editPersonInput) {
+      editPersonInput.focus();
+      editPersonInput.select();
+      editPersonInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { document.querySelector('[data-save-person]').click(); }
+        if (e.key === 'Escape') { editingPersonId = ''; render(); }
+      });
+    }
 
     const copyFromSelect = document.getElementById('f-copyfrom');
     if (copyFromSelect) copyFromSelect.addEventListener('change', () => {
@@ -1058,23 +1245,40 @@
     const addHotelBtn = document.getElementById('tm-add-hotel');
     if (addHotelBtn) addHotelBtn.addEventListener('click', () => {
       const guests = Array.from(app.querySelectorAll('[data-checkgroup="hotel-guests"] .tm-chip.on')).map(c => c.dataset.checkId);
+      const existing = state.hotels.find(h => h.id === editingHotelId);
       const hotel = {
-        id: uid(),
+        id: existing ? existing.id : uid(),
         name: document.getElementById('h-name').value.trim(),
         location: document.getElementById('h-location').value.trim(),
         checkin: document.getElementById('h-checkin').value,
         checkout: document.getElementById('h-checkout').value,
-        url: document.getElementById('h-url').value.trim(),
+        notes: document.getElementById('h-notes').value.trim(),
         guests
       };
       if (!hotel.name) return;
-      state.hotels.push(hotel);
+      if (existing) {
+        Object.assign(existing, hotel);
+      } else {
+        state.hotels.push(hotel);
+      }
+      editingHotelId = '';
       render(); saveData();
     });
     app.querySelectorAll('[data-remove-hotel]').forEach(btn => btn.addEventListener('click', () => {
       state.hotels = state.hotels.filter(h => h.id !== btn.dataset.removeHotel);
+      if (editingHotelId === btn.dataset.removeHotel) editingHotelId = '';
       render(); saveData();
     }));
+    app.querySelectorAll('[data-edit-hotel]').forEach(el => {
+      el.addEventListener('click', () => {
+        editingHotelId = el.dataset.editHotel;
+        render();
+        const card = document.getElementById('hotel-form-card');
+        if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+    const cancelHotelEdit = document.getElementById('cancel-hotel-edit');
+    if (cancelHotelEdit) cancelHotelEdit.addEventListener('click', () => { editingHotelId = ''; render(); });
 
     const addExpenseBtn = document.getElementById('tm-add-expense');
     if (addExpenseBtn) addExpenseBtn.addEventListener('click', () => {
@@ -1082,8 +1286,9 @@
       const amount = parseFloat(document.getElementById('e-amount').value);
       const paidBy = document.getElementById('e-paidby').value;
       if (!amount || !paidBy || splitAmong.length === 0) return;
+      const existing = state.expenses.find(e => e.id === editingExpenseId);
       const expense = {
-        id: uid(),
+        id: existing ? existing.id : uid(),
         description: document.getElementById('e-desc').value.trim(),
         amount,
         date: document.getElementById('e-date').value,
@@ -1091,13 +1296,29 @@
         category: document.getElementById('e-category').value,
         splitAmong
       };
-      state.expenses.push(expense);
+      if (existing) {
+        Object.assign(existing, expense);
+      } else {
+        state.expenses.push(expense);
+      }
+      editingExpenseId = '';
       render(); saveData();
     });
     app.querySelectorAll('[data-remove-expense]').forEach(btn => btn.addEventListener('click', () => {
       state.expenses = state.expenses.filter(e => e.id !== btn.dataset.removeExpense);
+      if (editingExpenseId === btn.dataset.removeExpense) editingExpenseId = '';
       render(); saveData();
     }));
+    app.querySelectorAll('[data-edit-expense]').forEach(el => {
+      el.addEventListener('click', () => {
+        editingExpenseId = el.dataset.editExpense;
+        render();
+        const card = document.getElementById('expense-form-card');
+        if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+    const cancelExpenseEdit = document.getElementById('cancel-expense-edit');
+    if (cancelExpenseEdit) cancelExpenseEdit.addEventListener('click', () => { editingExpenseId = ''; render(); });
   }
 
   loadData();
